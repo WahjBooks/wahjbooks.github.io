@@ -261,9 +261,11 @@ async function tryCode(code){
 }
 async function loadScope(s){
   if(DATA[s]||!KEYS[s]) return;
-  const buf=await (await fetch("data/"+s+".enc?v="+encodeURIComponent(META.updated||"0"))).arrayBuffer();
-  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(META.scopes[s].iv)},KEYS[s],buf);
-  DATA[s]=JSON.parse(new TextDecoder().decode(pt));
+  const get=async v=>{const buf=await (await fetch("data/"+s+".enc?v="+encodeURIComponent(v))).arrayBuffer();
+    const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(META.scopes[s].iv)},KEYS[s],buf);
+    DATA[s]=JSON.parse(new TextDecoder().decode(pt));};
+  try{ await get(META.updated||"0"); }
+  catch(e){ await get(Date.now()); }
 }
 
 /* ---------- boot ---------- */
@@ -643,7 +645,7 @@ function viewDash(m){
     .forEach(({e})=>rec.appendChild(el("div","recent",'<span class="d mono">'+esc((e.date||"").slice(5))+'</span><span class="t">'+esc((e.lines[0]||{}).desc||"")+'</span><span class="a">'+fmt(e.lines.reduce((a,l)=>a+(+l.dr),0))+'</span>')));
   c2.appendChild(rec); duo.appendChild(c2); m.appendChild(duo);
   if(scope==="vyltic") m.appendChild(el("p","meta","“Cash — share” can be negative: the bank accounts belong to the whole entity; the other side of the pool covers the difference."));
-  m.appendChild(el("p","meta","Signed in with: "+esc(WHO)+" · books updated "+esc(META.updated||"")+"."));
+  m.appendChild(el("p","meta","Signed in with: "+esc(WHO)+" · books updated "+esc((META.updated||"").slice(0,10))+"."));
 }
 function chart6(){
   const wrap=el("div","chartwrap");
