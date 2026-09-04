@@ -1,0 +1,97 @@
+{
+ "v": 1,
+ "iter": 310000,
+ "updated": "2026-09-04",
+ "scopes": {
+  "vyltic": {
+   "iv": "rrEHRquiysk62Hnc",
+   "bytes": 197874
+  },
+  "welltold": {
+   "iv": "r8Vk+lQfszRsvUfo",
+   "bytes": 17794
+  },
+  "consolidated": {
+   "iv": "TmfD7938QRr1q8En",
+   "bytes": 215305
+  }
+ },
+ "wraps": [
+  {
+   "label": "Ahmed \u2014 full access",
+   "salt": "Q+chjOuTePtrNN+sahPWwg==",
+   "keys": {
+    "vyltic": {
+     "iv": "GsNx7yM82uUIMCAb",
+     "ct": "aZllfR9CN6PuOfjBPrG8s/zSbqqfWpKgc7xW4b7kw9uxNdCI75wZHt+ZYWPl8hFo"
+    },
+    "welltold": {
+     "iv": "DpZ3Z8iSaDfFPv4T",
+     "ct": "0iis/HAIQL824OPBkKn5+snnQQvY9foUCXvsRaBHmQjtNafEiHi0Siv3HaynRm8e"
+    },
+    "consolidated": {
+     "iv": "KwOjyX+84PXklCr2",
+     "ct": "LvUqiQ5RpSmA7nITk6IFhQ8o1D3sSM9tCYfl0NLy9wnG71DUasd+ruQNBG4KjBLe"
+    }
+   }
+  },
+  {
+   "label": "Full access 2 (spare)",
+   "salt": "OqK0WE4KY6qQr2Tg2VqnLw==",
+   "keys": {
+    "vyltic": {
+     "iv": "J4LgjWcIug4l2PGc",
+     "ct": "/ttZ0LR8sG/JOR8jsf/He5QDyn4brqyLErDXwUwJtQ7RMAm1BKRCnRWqoM5c5oHA"
+    },
+    "welltold": {
+     "iv": "WxKVIgguzBjEXhJh",
+     "ct": "nOi8Zk/XYyMSzb/wTyC0PHo+9Jy6X2r8ioqrfSQusrVTZ70RTWipEp4uQsWqAKcL"
+    },
+    "consolidated": {
+     "iv": "q687j0Rp/Byb8KzI",
+     "ct": "2NX7KCPdE1k/YpkPIEemlCZ/+qdK5xY3T4pB7UwjI4w3lyD5tis2voAPkBLCKEj6"
+    }
+   }
+  },
+  {
+   "label": "Vyltic member 1",
+   "salt": "FLq94wAYqBMXal52VtTMDw==",
+   "keys": {
+    "vyltic": {
+     "iv": "6DjOmT4iTeQQaFbF",
+     "ct": "1Km+xFymslv6AlqLd5Ddp0RvTMrvraFllF3Qco5pOifVNz8TNWklZ6lmN1h/O1si"
+    }
+   }
+  },
+  {
+   "label": "Vyltic member 2",
+   "salt": "jVdtaBIk++lDz8j4Yp+NLQ==",
+   "keys": {
+    "vyltic": {
+     "iv": "DPZ1aov32FJEOFaa",
+     "ct": "QE+bze41fnPMUOy+6PVSpk/YDRzle83P+XCutRy4OJYsBDcFjVy/V91z4Gw5SEBV"
+    }
+   }
+  },
+  {
+   "label": "Welltold member 1",
+   "salt": "j0mRJ48LpJSeXmTryp9Ovg==",
+   "keys": {
+    "welltold": {
+     "iv": "CsOkt8Ce5Hic8Xmg",
+     "ct": "xn+Y8E8mwaePCThUUjh8q9QiO0/i5TchtFw5eZmBvbDCVYnzgODWfMoMdGXdLTmC"
+    }
+   }
+  },
+  {
+   "label": "Welltold member 2",
+   "salt": "+F9e9GU3ri6CcW4RQS8T5g==",
+   "keys": {
+    "welltold": {
+     "iv": "JHI776ffCe/0K0l7",
+     "ct": "JYQc6LJle13AeqnOx4LtTVEoM8oeN1H8j4QRc/Rlz+3LVqQkBNQXvF8ZEZCGyaf5"
+    }
+   }
+  }
+ ]
+}
