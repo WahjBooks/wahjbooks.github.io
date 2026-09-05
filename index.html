@@ -241,36 +241,33 @@ const b64d=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
 const b64e=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
 async function sha256hex(s){const h=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,"0")).join("");}
 
-let META=null, KEYS={}, RAW={}, WHO="", DATA={}, ADMIN=null;
+let META=null, KEYS={}, RAW={}, WHO="", DATA={};
 let tab="Dashboard", scope="";
 let draft=null;
 try{ tab=localStorage.getItem("wahj.tab")||"Dashboard"; scope=localStorage.getItem("wahj.scope")||""; }catch(e){}
-const myScopes=()=>Object.keys(KEYS);
 const ord={vyltic:0,welltold:1,consolidated:2};
 const scopeLabel={vyltic:"Vyltic",welltold:"Welltold",consolidated:"Consolidated"};
 const entriesArr=()=>{ const d=DATA[scope]||{}; return Object.keys(d).sort().map(k=>({id:k,e:d[k]})); };
 
-/* ---------- crypto / auth ---------- */
-async function deriveKek(code,salt,usages){
-  const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(code),"PBKDF2",false,["deriveKey"]);
-  return crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:META.iter,hash:"SHA-256"},km,{name:"AES-GCM",length:256},false,usages||["decrypt"]);
+/* ---------- crypto / auth (email + password; keys unwrapped client-side) ---------- */
+let ME=null, ADMIN=null, MYEMAIL="";
+const SUPER="a_altayeb@hotmail.com";
+async function deriveKek(pw,salt,usages){
+  const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveBits"]);
+  const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt,iterations:META.iter,hash:"SHA-256"},km,256);
+  return new Uint8Array(bits);
 }
-async function tryCode(code){
-  const found={},raw={}; let label="";
-  for(const w of META.wraps){
-    let kek; try{ kek=await deriveKek(code,b64d(w.salt)); }catch(e){ continue; }
-    let hit=false;
-    for(const [s,k] of Object.entries(w.keys)){
-      try{
-        const r=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(k.iv)},kek,b64d(k.ct));
-        raw[s]=new Uint8Array(r);
-        found[s]=await crypto.subtle.importKey("raw",r,{name:"AES-GCM"},false,["decrypt","encrypt"]);
-        hit=true;
-      }catch(e){}
-    }
-    if(hit){ label=w.label; break; }
+const kekKey=async raw=>crypto.subtle.importKey("raw",raw,{name:"AES-GCM"},false,["encrypt","decrypt"]);
+async function unwrapAll(u,kekRaw){
+  const k=await kekKey(kekRaw); const raw={};
+  for(const [s,w] of Object.entries(u.keys||{})){
+    try{ raw[s]=new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(w.iv)},k,b64d(w.ct))); }catch(e){ return null; }
   }
-  return {keys:found,raw,label};
+  return raw;
+}
+async function installKeys(rawMap){
+  KEYS={}; RAW={};
+  for(const [s,b] of Object.entries(rawMap)){ RAW[s]=b; if(s!=="admin") KEYS[s]=await crypto.subtle.importKey("raw",b,{name:"AES-GCM"},false,["decrypt"]); }
 }
 async function loadScope(s){
   if(DATA[s]||!KEYS[s]) return;
@@ -280,57 +277,48 @@ async function loadScope(s){
   try{ await get(META.updated||"0"); }
   catch(e){ await get(Date.now()); }
 }
+const isAdmin=()=>!!RAW.admin;
+const myScopes=()=>Object.keys(KEYS);
 
 /* ---------- boot ---------- */
 async function boot(){
   const m=document.getElementById("main");
   try{ META=await (await fetch("data/meta.json?t="+Date.now())).json(); }
   catch(e){ m.innerHTML='<div class="authbox"><h1><span class="codot"></span>Wahj Books</h1><p>Couldn’t load the data files. Check your connection and refresh.</p></div>'; return; }
-  const hm=(location.hash||"").match(/k=([a-z0-9-]+)/i);
-  if(hm){
-    const r=await tryCode(hm[1].toLowerCase());
-    if(Object.keys(r.keys).length){
-      try{ localStorage.setItem("wahj.code",hm[1].toLowerCase()); }catch(e){}
-      history.replaceState(null,"",location.pathname);
-      KEYS=r.keys; RAW=r.raw; WHO=r.label; return enter();
-    }
-  }
-  let saved=""; try{ saved=localStorage.getItem("wahj.code")||""; }catch(e){}
-  if(saved){
-    const r=await tryCode(saved);
-    if(Object.keys(r.keys).length){ KEYS=r.keys; RAW=r.raw; WHO=r.label; return enter(); }
+  let sess=null; try{ sess=JSON.parse(sessionStorage.getItem("wahj.sess")||"null"); }catch(e){}
+  if(sess&&sess.email&&sess.kek){
+    const u=await findUser(sess.email);
+    if(u){ const raw=await unwrapAll(u,b64d(sess.kek)); if(raw){ MYEMAIL=sess.email; await installKeys(raw); WHO=sess.name||sess.email; return enter(); } }
+    try{ sessionStorage.removeItem("wahj.sess"); }catch(e){}
   }
   renderAuth(m);
 }
+async function findUser(email){ const eh=await sha256hex(email.trim().toLowerCase()); return (META.users||[]).find(u=>u.ehash===eh)||null; }
 function renderAuth(m){
   document.getElementById("hdr").hidden=true;
   m.innerHTML="";
   const b=el("div","authbox");
-  b.innerHTML='<h1><span class="codot"></span>Wahj Books</h1><p>Sign in with your email, or open the personal access link Ahmed sent you.</p>';
+  b.innerHTML='<h1><span class="codot"></span>Wahj Books</h1><p>Sign in to the company books.</p>';
   const f=el("form");
-  const inp=el("input"); inp.placeholder="you@example.com"; inp.autocomplete="email"; inp.required=true;
+  const inp=el("input"); inp.type="email"; inp.placeholder="Email"; inp.autocomplete="username"; inp.required=true;
+  const pw=el("input"); pw.type="password"; pw.placeholder="Password"; pw.autocomplete="current-password"; pw.required=true;
   const go=el("button","btn","Sign in"); go.type="submit";
   const err=el("div","err","");
-  f.append(inp,go,err);
-  f.onsubmit=async ev=>{ ev.preventDefault(); go.disabled=true; err.style.color="var(--neg)"; err.textContent="";
-    const v=inp.value.trim().toLowerCase();
-    if(v.includes("@")){
-      const eh=await sha256hex(v);
-      const w=META.wraps.find(x=>x.ehash===eh);
-      if(!w){ err.textContent="No access for this email yet — ask Ahmed to add you."; }
-      else{
-        let saved=""; try{ saved=localStorage.getItem("wahj.code")||""; }catch(e){}
-        if(saved){ const r=await tryCode(saved); if(Object.keys(r.keys).length){ KEYS=r.keys;RAW=r.raw;WHO=r.label; return enter(); } }
-        err.style.color="var(--muted)";
-        err.textContent="This email has access ("+w.label+"), but this device isn’t linked yet — open your personal access link once on this device (ask Ahmed to resend it).";
-      }
-    } else {
-      const r=await tryCode(v);
-      if(Object.keys(r.keys).length){ try{localStorage.setItem("wahj.code",v);}catch(e){} KEYS=r.keys;RAW=r.raw;WHO=r.label; return enter(); }
-      err.textContent="That doesn’t open anything. Check with Ahmed.";
-    }
-    go.disabled=false; };
-  b.appendChild(f); m.appendChild(b);
+  f.append(inp,pw,go,err);
+  f.onsubmit=async ev=>{ ev.preventDefault(); go.disabled=true; go.textContent="Signing in…"; err.textContent="";
+    const email=inp.value.trim().toLowerCase();
+    const u=await findUser(email);
+    let raw=null, kek=null;
+    if(u){ kek=await deriveKek(pw.value,b64d(u.salt)); raw=await unwrapAll(u,kek); }
+    if(!raw||!Object.keys(raw).length){ err.textContent="Wrong email or password, or this email has no access."; go.disabled=false; go.textContent="Sign in"; return; }
+    MYEMAIL=email; await installKeys(raw); WHO=email;
+    try{ sessionStorage.setItem("wahj.sess",JSON.stringify({email,kek:b64e(kek)})); }catch(e){}
+    if(isAdmin()){ try{ await loadAdmin(); const me=ADMIN.people.find(p=>p.email===email); if(me&&me.name) WHO=me.name; }catch(e){} }
+    enter();
+  };
+  b.appendChild(f);
+  b.appendChild(el("p","meta","Forgot your password? Ask Ahmed (or any admin) to reset it."));
+  m.appendChild(b);
 }
 async function enter(){
   if(!myScopes().includes(scope)) scope=myScopes().sort((a,b)=>ord[b]-ord[a])[0];
@@ -339,7 +327,7 @@ async function enter(){
   await loadScope(scope);
   renderScopes(); renderTabs(); render();
 }
-function signOut(){ try{localStorage.removeItem("wahj.code");}catch(e){} location.reload(); }
+function signOut(){ try{sessionStorage.removeItem("wahj.sess");}catch(e){} location.reload(); }
 
 /* ---------- chrome ---------- */
 function renderScopes(){
@@ -351,7 +339,7 @@ function renderScopes(){
 }
 function tabsList(){
   const t=["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance","Lists","CoA","Record","Guide"];
-  if(KEYS.consolidated) t.push("Admin");
+  if(isAdmin()) t.push("Admin");
   return t;
 }
 function renderTabs(){
@@ -728,113 +716,109 @@ function viewRecord(m){
   };
 }
 
-/* ---------- admin (Ahmed) ---------- */
+/* ---------- admin (people & permissions; saved straight to the site via GitHub) ---------- */
 const GH={owner:"WahjBooks",repo:"wahjbooks.github.io"};
 async function ghGetSha(path,pat){
-  const r=await fetch("https://api.github.com/repos/"+GH.owner+"/"+GH.repo+"/contents/"+path,{headers:{Authorization:"Bearer "+pat,Accept:"application/vnd.github+json"}});
+  const r=await fetch("https://api.github.com/repos/"+GH.owner+"/"+GH.repo+"/contents/"+path+"?t="+Date.now(),{headers:{Authorization:"Bearer "+pat,Accept:"application/vnd.github+json"}});
   if(r.status===404) return null;
   if(!r.ok) throw new Error("GitHub read failed ("+r.status+")");
   return (await r.json()).sha;
 }
 async function ghPut(path,bytes,msg,pat){
   const sha=await ghGetSha(path,pat);
-  const body={message:msg+"\n\nCo-Authored-By: Claude Fable 5 <noreply@anthropic.com>",content:b64e(bytes)};
+  const body={message:msg+"\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>",content:b64e(bytes)};
   if(sha) body.sha=sha;
   const r=await fetch("https://api.github.com/repos/"+GH.owner+"/"+GH.repo+"/contents/"+path,{method:"PUT",headers:{Authorization:"Bearer "+pat,Accept:"application/vnd.github+json","Content-Type":"application/json"},body:JSON.stringify(body)});
   if(!r.ok) throw new Error("GitHub write failed ("+r.status+")");
 }
 async function loadAdmin(){
   if(ADMIN) return ADMIN;
+  const k=await crypto.subtle.importKey("raw",RAW.admin,{name:"AES-GCM"},false,["decrypt","encrypt"]);
   const buf=await (await fetch("data/admin.enc?t="+Date.now())).arrayBuffer();
-  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(META.admin.iv)},KEYS.consolidated,buf);
+  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(META.admin.iv)},k,buf);
   ADMIN=JSON.parse(new TextDecoder().decode(pt));
   return ADMIN;
 }
-function genCode(){ const a="23456789abcdefghjkmnpqrstuvwxyz"; const r=crypto.getRandomValues(new Uint8Array(12));
-  return [...r].map((x,i)=>a[x%a.length]+((i%4===3&&i<11)?"-":"")).join(""); }
-async function saveAdmin(pat,msg){
-  // rebuild meta.wraps + admin.enc from ADMIN.people, keeping scope keys
-  const wraps=[];
+async function saveAdmin(msg){
+  const users=[];
   for(const p of ADMIN.people){
-    const salt=crypto.getRandomValues(new Uint8Array(16));
-    const kek=await deriveKek(p.code,salt,["encrypt"]);
-    const keys={};
-    for(const s of p.scopes){
-      if(!RAW[s]) throw new Error("You can only manage scopes your own code opens.");
+    const k=await kekKey(b64d(p.kek)); const keys={};
+    const want=[...p.scopes,...(p.admin?["admin"]:[])];
+    for(const s of want){ if(!RAW[s]) throw new Error("You can’t grant "+s+" — you don’t hold it yourself.");
       const iv=crypto.getRandomValues(new Uint8Array(12));
-      const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},kek,RAW[s]);
-      keys[s]={iv:b64e(iv),ct:b64e(ct)};
-    }
-    const w={label:p.name,salt:b64e(salt),keys};
-    if(p.email) w.ehash=await sha256hex(p.email.trim().toLowerCase());
-    wraps.push(w);
+      keys[s]={iv:b64e(iv),ct:b64e(await crypto.subtle.encrypt({name:"AES-GCM",iv},k,RAW[s]))}; }
+    users.push({ehash:await sha256hex(p.email),salt:p.salt,keys});
   }
-  const meta2=JSON.parse(JSON.stringify(META)); meta2.wraps=wraps;
+  const meta2=JSON.parse(JSON.stringify(META)); meta2.users=users;
+  const ak=await crypto.subtle.importKey("raw",RAW.admin,{name:"AES-GCM"},false,["encrypt"]);
   const aiv=crypto.getRandomValues(new Uint8Array(12));
-  const aenc=await crypto.subtle.encrypt({name:"AES-GCM",iv:aiv},KEYS.consolidated,new TextEncoder().encode(JSON.stringify(ADMIN)));
+  const aenc=await crypto.subtle.encrypt({name:"AES-GCM",iv:aiv},ak,new TextEncoder().encode(JSON.stringify(ADMIN)));
   meta2.admin={iv:b64e(aiv)};
-  await ghPut("data/admin.enc",aenc,msg,pat);
-  await ghPut("data/meta.json",new TextEncoder().encode(JSON.stringify(meta2,null,1)),msg,pat);
+  await ghPut("data/admin.enc",aenc,msg,ADMIN.pat);
+  await ghPut("data/meta.json",new TextEncoder().encode(JSON.stringify(meta2,null,1)),msg,ADMIN.pat);
   META=meta2;
 }
+function genPassword(){ const a="abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"; const r=crypto.getRandomValues(new Uint8Array(12)); return [...r].map((x,i)=>a[x%a.length]+(i===3||i===7?"-":"")).join(""); }
+async function setPassword(p,pw){ if(!p.salt) p.salt=b64e(crypto.getRandomValues(new Uint8Array(16))); p.kek=b64e(await deriveKek(pw,b64d(p.salt))); }
 function viewAdmin(m){
-  let pat=""; try{ pat=localStorage.getItem("wahj.pat")||""; }catch(e){}
   const c=el("div");
-  c.appendChild(el("p","meta","Give access by email, tick what each person sees, and send them their personal link. Changes go live for everyone in about a minute. Only you (and full-access holders) can open this tab."));
-  if(!pat){
-    const f=el("div","filters");
-    const i=el("input"); i.placeholder="Paste your GitHub key (ghp_…) to enable editing"; i.style.flex="1"; i.type="password";
-    const b=el("button","btn2","Save on this device");
-    b.onclick=()=>{ try{localStorage.setItem("wahj.pat",i.value.trim());}catch(e){} render(); };
-    f.append(i,b); c.appendChild(f); m.appendChild(c);
-    c.appendChild(el("p","meta","The key stays only in this browser. Without it you can view people but not change them."));
-  }
+  c.appendChild(el("p","meta","Add people with their email and a first password, tick what they see, and mark admins. Tell them their password (they use it on the sign-in page); reset it here any time. Changes go live for everyone in about a minute."));
   const zone=el("div"); c.appendChild(zone); m.appendChild(c);
   loadAdmin().then(()=>{
-    const t=el("table","admtbl"); t.innerHTML='<tr><th>Person</th><th>Email</th><th>Access</th><th>Link</th><th></th></tr>';
+    zone.innerHTML="";
+    const t=el("table","admtbl"); t.innerHTML='<tr><th>Person</th><th>Email</th><th>Sees</th><th>Admin</th><th></th></tr>';
     ADMIN.people.forEach((p,idx)=>{
       const tr=el("tr");
-      const nm=el("input"); nm.value=p.name; nm.onchange=()=>p.name=nm.value;
-      const em=el("input"); em.value=p.email||""; em.placeholder="email"; em.onchange=()=>p.email=em.value.trim();
-      const td1=el("td"); td1.appendChild(nm); const td2=el("td"); td2.appendChild(em);
+      const nm=el("input"); nm.value=p.name||""; nm.placeholder="name"; nm.onchange=()=>p.name=nm.value.trim();
+      const td1=el("td"); td1.appendChild(nm); tr.appendChild(td1);
+      tr.appendChild(el("td","mono",esc(p.email)));
       const td3=el("td");
-      ["vyltic","welltold","consolidated"].forEach(s=>{
-        const lab=el("label"); const cb=el("input"); cb.type="checkbox"; cb.checked=p.scopes.includes(s);
-        cb.onchange=()=>{ p.scopes=cb.checked?[...new Set([...p.scopes,s])]:p.scopes.filter(x=>x!==s); };
-        lab.appendChild(cb); lab.append(" "+scopeLabel[s]); td3.appendChild(lab); });
-      const td4=el("td");
-      const lk=el("button","btn3","Copy link");
-      lk.onclick=()=>{ const url=location.origin+location.pathname+"#k="+p.code;
-        navigator.clipboard&&navigator.clipboard.writeText(url).then(()=>toast("Link copied — send it to "+(p.name||"them")+" privately.")); };
-      td4.appendChild(lk);
-      const td5=el("td");
-      const rm=el("button","btn3 danger","Remove");
-      rm.onclick=()=>{ if(confirm("Remove "+p.name+"’s access?")){ ADMIN.people.splice(idx,1); render(); } };
-      td5.appendChild(rm);
-      [td1,td2,td3,td4,td5].forEach(x=>tr.appendChild(x));
+      ["vyltic","welltold","consolidated"].forEach(s=>{ const lab=el("label"); const cb=el("input"); cb.type="checkbox"; cb.checked=p.scopes.includes(s); cb.disabled=!RAW[s];
+        cb.onchange=()=>{ p.scopes=cb.checked?[...new Set([...p.scopes,s])]:p.scopes.filter(x=>x!==s); }; lab.appendChild(cb); lab.append(" "+scopeLabel[s]); td3.appendChild(lab); });
+      tr.appendChild(td3);
+      const td4=el("td"); const adm=el("input"); adm.type="checkbox"; adm.checked=!!p.admin; adm.disabled=(p.email===SUPER); adm.onchange=()=>p.admin=adm.checked; td4.appendChild(adm); tr.appendChild(td4);
+      const td5=el("td"); const acts=el("div","actions"); acts.style.marginTop="0";
+      const rp=el("button","btn3","Reset password");
+      rp.onclick=async()=>{ const pw=prompt("New password for "+(p.name||p.email)+" (10+ characters):",genPassword()); if(!pw) return; if(pw.length<10){ toast("Use at least 10 characters."); return; }
+        await setPassword(p,pw); toast("Password set — click Save changes, then tell them: "+pw,9000); };
+      const rm=el("button","btn3 danger","Remove"); rm.disabled=(p.email===SUPER);
+      rm.onclick=()=>{ if(confirm("Remove "+(p.name||p.email)+"’s access?")){ ADMIN.people.splice(idx,1); render(); } };
+      acts.append(rp,rm); td5.appendChild(acts); tr.appendChild(td5);
       t.appendChild(tr);
     });
     const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+    zone.appendChild(el("h2","sec","Add a person"));
+    const f=el("div","filters");
+    const nname=el("input"); nname.placeholder="Name";
+    const nemail=el("input"); nemail.type="email"; nemail.placeholder="email@example.com"; nemail.style.minWidth="210px";
+    const npw=el("input"); npw.placeholder="First password (10+ chars)"; npw.value=genPassword(); npw.className="mono"; npw.style.minWidth="170px";
+    const nb={}; const sc=el("span");
+    ["vyltic","welltold","consolidated"].forEach(s=>{ const lab=el("label"); lab.style.marginRight="10px"; const cb=el("input"); cb.type="checkbox"; cb.disabled=!RAW[s]; nb[s]=cb; lab.appendChild(cb); lab.append(" "+scopeLabel[s]); sc.appendChild(lab); });
+    const nadm=el("label"); const nacb=el("input"); nacb.type="checkbox"; nadm.appendChild(nacb); nadm.append(" Admin");
+    const add=el("button","btn2","Add");
+    f.append(nname,nemail,npw,sc,nadm,add); zone.appendChild(f);
+    add.onclick=async()=>{ const em=nemail.value.trim().toLowerCase(); if(!em.includes("@")){ toast("Enter a valid email."); return; }
+      if(ADMIN.people.some(p=>p.email===em)){ toast("That email is already in the list."); return; }
+      const scopes=Object.keys(nb).filter(s=>nb[s].checked); if(!scopes.length){ toast("Tick at least one company."); return; }
+      if(npw.value.length<10){ toast("Password: at least 10 characters."); return; }
+      const p={name:nname.value.trim(),email:em,scopes,admin:nacb.checked}; await setPassword(p,npw.value); ADMIN.people.push(p);
+      toast("Added. Click Save changes, then tell "+(p.name||em)+" their password: "+npw.value,9000); render(); };
     const acts=el("div","actions");
-    const add=el("button","btn2","+ Add person");
-    add.onclick=()=>{ ADMIN.people.push({name:"",email:"",scopes:["vyltic"],code:genCode()}); render(); };
     const save=el("button","btn","Save changes");
-    save.onclick=async()=>{ let p=""; try{p=localStorage.getItem("wahj.pat")||"";}catch(e){}
-      if(!p){ toast("Paste your GitHub key first."); return; }
-      save.disabled=true; save.textContent="Saving…";
-      try{ await saveAdmin(p,"Update access (people & permissions)"); toast("Saved — live within a minute."); }
-      catch(e2){ toast("Save failed: "+e2.message); }
+    save.onclick=async()=>{ save.disabled=true; save.textContent="Saving…";
+      try{ await saveAdmin("Update people & permissions"); toast("Saved — live within a minute."); }
+      catch(e){ toast("Save failed: "+e.message); }
       save.disabled=false; save.textContent="Save changes"; };
-    acts.append(add,save); zone.appendChild(acts);
-    zone.appendChild(el("p","meta","Each person opens their link once per device; after that the site remembers them and they can sign in by email. Removing a person kills their link. If you ever want the underlying keys rotated completely (paranoid mode), ask Claude."));
-  }).catch(e=>zone.appendChild(el("p","meta","Couldn’t open the people register: "+esc(e.message))));
+    acts.append(save); zone.appendChild(acts);
+    zone.appendChild(el("p","meta","Passwords are never stored — the site derives a key from them. Keep them 10+ characters. Ahmed’s own admin access can’t be removed."));
+  }).catch(e=>{ zone.innerHTML=""; zone.appendChild(el("p","meta","Couldn’t open the people register: "+esc(e.message))); });
 }
 
 /* ---------- guide ---------- */
 function viewGuide(m){
   const g=el("div","guide");
   g.innerHTML='<h3>What this is</h3><p>The live books of <strong>Wahj</strong> — Vyltic and Welltold — with the same sheets as the Excel: P&amp;L, Balance Sheet, Cash Flow, GL, Trial Balance, Lists and CoA. What you can see is set per person by Ahmed (Vyltic, Welltold, or everything).</p>'
-  +'<h3>Signing in</h3><p>Open the personal access link Ahmed sent you once — after that this device remembers you and the email box on the front page recognises you. New device? Open your link again.</p>'
+  +'<h3>Signing in</h3><p>Email and password, like any site. An admin adds you and gives you your first password; what you can see is whatever was set for your email. Forgot it? An admin resets it in seconds.</p>'
   +'<h3>How entries get in</h3><p>Send receipts and amounts to Ahmed as usual, or build a draft in the <strong>Record</strong> tab (your own AI can draft it — copy the briefing below into any AI chat). Ahmed&rsquo;s Claude posts it; the site updates for everyone within a minute.</p>'
   +'<h3>Reading the numbers</h3><p>Cash is one pooled bank balance for the whole entity — a company&rsquo;s share can be negative (the other side funds it). Lines marked <code>IC Intercompany</code> only balance cross-company entries inside a single-company view. The Welltold profit share (⅓ Joud + ⅓ Rami of the monthly net) is booked centrally at month-end.</p>'
   +'<h3>Briefing for your AI</h3>';
