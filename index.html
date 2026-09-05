@@ -135,6 +135,18 @@ table.xlm th:first-child{text-align:left}
 table.xlm td{padding:3px 8px;font-size:12px;border-bottom:1px solid var(--line);white-space:nowrap}
 table.xlm td.a{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums;text-align:right}
 table.xlm tr.l0 td{font-weight:600;background:var(--surface2)}
+
+.xlwrap{max-height:78vh;overflow:auto}
+table.xl{min-width:520px}
+table.xl th{position:sticky;top:0;z-index:3;background:var(--surface2);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line2);white-space:nowrap}
+table.xl th.a{text-align:right}
+table.xl td:first-child,table.xl th:first-child{position:sticky;left:0;z-index:2;background:var(--surface);min-width:220px;max-width:340px}
+table.xl th:first-child{z-index:4;background:var(--surface2)}
+table.xl tr.l0 td:first-child{background:var(--surface2)}
+table.gl thead th{z-index:3}
+#totop{position:fixed;right:18px;bottom:18px;z-index:40;background:var(--ink);color:var(--bg);border-radius:99px;padding:9px 14px;font-weight:600;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .2s}
+#totop.show{opacity:1;pointer-events:auto}
+@media (prefers-reduced-motion:reduce){#totop{transition:none}}
 .admtbl{width:100%;border-collapse:collapse}
 .admtbl th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);text-align:left;padding:6px 8px}
 .admtbl td{padding:7px 8px;border-top:1px solid var(--line);vertical-align:middle;font-size:13px}
@@ -152,6 +164,7 @@ table.xlm tr.l0 td{font-weight:600;background:var(--surface2)}
   <nav class="tabs" id="tabs" role="tablist"></nav>
 </div></header>
 <main id="main"><div class="skel"></div></main>
+<button id="totop" aria-label="Scroll to top">↑ Top</button>
 
 <script>
 "use strict";
@@ -357,187 +370,155 @@ function render(){
 /* ---------- report engine ---------- */
 function allLines(){ const out=[]; entriesArr().forEach(({e})=>e.lines.forEach(l=>out.push({e,l}))); return out; }
 function months(){ return [...new Set(entriesArr().map(({e})=>(e.date||"").slice(0,7)))].sort(); }
-function sumWhere(pred){ let d=0,c=0; allLines().forEach(({e,l})=>{ if(pred(e,l)){ d+=+l.dr; c+=+l.cr; } }); return {d,c}; }
-function partiesOf(codes,from,to){
-  const m={};
-  allLines().forEach(({e,l})=>{ if(!codes.includes(l.code)) return; if(from&&e.date<from) return; if(to&&e.date>to) return;
-    const p=l.party||"(unassigned)"; m[p]=(m[p]||0)+(+l.dr)-(+l.cr); });
-  return m;
+function monthEnd(k){ const y=+k.slice(0,4), m=+k.slice(5,7); return new Date(Date.UTC(y,m,0)).toISOString().slice(0,10); }
+function mlabel(k){ return new Date(k+"-15T00:00:00Z").toLocaleString("en",{month:"short",timeZone:"UTC"})+" "+k.slice(0,4); }
+function aggregate(from,to){
+  const byCode={},byParty={};
+  allLines().forEach(({e,l})=>{ if(from&&e.date<from) return; if(to&&e.date>to) return;
+    const v=(+l.dr)-(+l.cr); byCode[l.code]=(byCode[l.code]||0)+v;
+    const bp=byParty[l.code]=byParty[l.code]||{}; const p=l.party||"(unassigned)"; bp[p]=(bp[p]||0)+v; });
+  return {byCode,byParty};
 }
-function optRow(m,opts,onchange){
+function periodCols(st){
+  if(st.view==="total") return [{label:"Total",from:st.from,to:st.to}];
+  const ms=months().filter(k=>k>=st.from.slice(0,7)&&k<=st.to.slice(0,7));
+  return ms.map(k=>({label:mlabel(k),from:st.view==="cumulative"?st.from:(k+"-01"),to:monthEnd(k)<st.to?monthEnd(k):st.to}));
+}
+const nz=a=>a.some(v=>Math.abs(v)>=0.005);
+const addv=(a,b)=>a.map((v,i)=>v+b[i]);
+const subv=(a,b)=>a.map((v,i)=>v-b[i]);
+function optRow(m,st,onchange,views){
   const f=el("div","filters");
-  if(opts.level!==undefined){
+  if(st.level!==undefined){
     f.appendChild(el("span","flbl","Level:"));
     const s=el("select"); s.innerHTML='<option value="1">1 — sections</option><option value="3">3 — accounts</option><option value="10">10 — accounts + parties</option>';
-    s.value=String(opts.level); s.onchange=()=>onchange({level:+s.value}); f.appendChild(s);
+    s.value=String(st.level); s.onchange=()=>onchange({level:+s.value}); f.appendChild(s);
   }
-  if(opts.from!==undefined){
-    f.appendChild(el("span","flbl","From:")); const a=el("input"); a.type="date"; a.value=opts.from; a.onchange=()=>onchange({from:a.value}); f.appendChild(a);
-    f.appendChild(el("span","flbl","to:")); const b=el("input"); b.type="date"; b.value=opts.to; b.onchange=()=>onchange({to:b.value}); f.appendChild(b);
+  if(views){
+    f.appendChild(el("span","flbl","View:"));
+    const s=el("select"); s.innerHTML=views.map(v=>'<option value="'+v[0]+'">'+v[1]+'</option>').join("");
+    s.value=st.view; s.onchange=()=>onchange({view:s.value}); f.appendChild(s);
   }
-  if(opts.asOf!==undefined){
-    f.appendChild(el("span","flbl","As at:")); const a=el("input"); a.type="date"; a.value=opts.asOf; a.onchange=()=>onchange({asOf:a.value}); f.appendChild(a);
+  if(st.from!==undefined){
+    f.appendChild(el("span","flbl","From:")); const a=el("input"); a.type="date"; a.value=st.from; a.onchange=()=>onchange({from:a.value}); f.appendChild(a);
+    f.appendChild(el("span","flbl","to:")); const b=el("input"); b.type="date"; b.value=st.to; b.onchange=()=>onchange({to:b.value}); f.appendChild(b);
+  }
+  if(st.asOf!==undefined){
+    f.appendChild(el("span","flbl","As at:")); const a=el("input"); a.type="date"; a.value=st.asOf; a.onchange=()=>onchange({asOf:a.value}); f.appendChild(a);
   }
   f.appendChild(el("span","meta","Company: "+scopeLabel[scope]));
   m.appendChild(f);
 }
-function xlTable(rows){
-  const w=el("div","tablewrap"); w.style.padding="6px 4px";
+function xlGrid(rows,cols){
+  const multi=cols.length>1;
+  const w=el("div","tablewrap xlwrap");
   const t=el("table","xl");
+  const hr=el("tr","hdr"); hr.appendChild(el("th","","Line"));
+  if(multi) cols.forEach(c=>hr.appendChild(el("th","a",esc(c.label))));
+  else { hr.appendChild(el("th","a","Total")); hr.appendChild(el("th","a","Detail")); }
+  t.appendChild(hr);
   rows.forEach(r=>{
     const tr=el("tr",r.cls||"");
     const td=el("td",r.ind?("i"+r.ind):""); td.textContent=r.label; tr.appendChild(td);
-    const a1=el("td","a"); a1.textContent=r.total!==undefined?fmt(r.total):""; tr.appendChild(a1);
-    const a2=el("td","a"); a2.textContent=r.amt!==undefined?fmt(r.amt):""; tr.appendChild(a2);
+    if(multi){ r.vals.forEach(v=>{ const c=el("td","a"); c.textContent=Math.abs(v)>=0.005?fmt(v):"·"; tr.appendChild(c); }); }
+    else { const sec=(r.cls==="l0"||r.cls==="grand");
+      const a1=el("td","a"); a1.textContent=sec?fmt(r.vals[0]):""; tr.appendChild(a1);
+      const a2=el("td","a"); a2.textContent=sec?"":fmt(r.vals[0]); tr.appendChild(a2); }
     t.appendChild(tr);
   });
   w.appendChild(t); return w;
 }
-function monthlyTable(m,rowsFn,title){
-  m.appendChild(el("div","xlhead",title));
-  const ms=months();
-  const w=el("div","tablewrap");
-  const t=el("table","xlm");
-  const hr=el("tr"); hr.appendChild(el("th","","Line"));
-  ms.forEach(k=>{const d=new Date(k+"-15"); hr.appendChild(el("th","",d.toLocaleString("en",{month:"short"})+" "+k.slice(0,4)));});
-  t.appendChild(hr);
-  rowsFn(ms).forEach(r=>{
-    const tr=el("tr",r.cls||"");
-    tr.appendChild(el("td","",esc(r.label)));
-    r.vals.forEach(v=>{const td=el("td","a"); td.textContent=v?fmt(v):"·"; tr.appendChild(td);});
-    t.appendChild(tr);
-  });
-  w.appendChild(t); m.appendChild(w);
+const REVC=COA.filter(a=>a[2]==="Revenue").map(a=>a[0]), COSC=COA.filter(a=>a[4]==="Cost of Sales").map(a=>a[0]), OPXC=COA.filter(a=>a[4]==="Operating Expenses").map(a=>a[0]);
+function plGrid(level,cols){
+  const aggs=cols.map(c=>aggregate(c.from,c.to));
+  const sign=c=>ACC[c].type==="Revenue"?-1:1;
+  const section=(codes)=>{ let tot=cols.map(()=>0); const body=[];
+    codes.forEach(c=>{ const vals=aggs.map(a=>(a.byCode[c]||0)*sign(c)); if(!nz(vals)) return; tot=addv(tot,vals);
+      if(level>=3){ body.push({label:ACC[c].name,ind:1,cls:"l1",vals});
+        if(level>=10){ const ps=new Set(); aggs.forEach(a=>Object.keys(a.byParty[c]||{}).forEach(p=>ps.add(p)));
+          [...ps].sort().forEach(p=>{ const pv=aggs.map(a=>((a.byParty[c]||{})[p]||0)*sign(c)); if(nz(pv)) body.push({label:p,ind:2,vals:pv}); }); } } });
+    return {tot,body}; };
+  const R=section(REVC),C=section(COSC),O=section(OPXC);
+  return [{label:"REVENUE",cls:"l0",vals:R.tot},...R.body,
+          {label:"COST OF SALES",cls:"l0",vals:C.tot},...C.body,
+          {label:"GROSS PROFIT",cls:"l0",vals:subv(R.tot,C.tot)},
+          {label:"OPERATING EXPENSES",cls:"l0",vals:O.tot},...O.body,
+          {label:"NET INCOME",cls:"grand",vals:subv(subv(R.tot,C.tot),O.tot)}];
 }
-function plRows(level,from,to){
-  const inP=(e)=>((!from||e.date>=from)&&(!to||e.date<=to));
-  const val={}; // code -> amount (sign per section)
-  allLines().forEach(({e,l})=>{ if(!inP(e)) return; const a=ACC[l.code]; if(!a) return;
-    if(a.type==="Revenue") val[l.code]=(val[l.code]||0)+(+l.cr)-(+l.dr);
-    else if(a.type==="Expense") val[l.code]=(val[l.code]||0)+(+l.dr)-(+l.cr); });
-  const sec=(title,codes,sign)=>{
-    const rows=[]; let tot=0;
-    codes.forEach(c=>{ const v=val[c]||0; if(Math.abs(v)<0.005) return; tot+=v;
-      if(level>=3){ rows.push({label:ACC[c].name,amt:v,ind:1,cls:"l1"});
-        if(level>=10){ const pm=partiesOf([c],from,to); Object.keys(pm).sort().forEach(p=>{ let pv=pm[p]; if(ACC[c].type==="Revenue")pv=-pv; if(Math.abs(pv)>=0.005) rows.push({label:p,amt:pv,ind:2}); }); } } });
-    return {rows,tot};
-  };
-  const revC=COA.filter(a=>a[2]==="Revenue").map(a=>a[0]);
-  const cosC=COA.filter(a=>a[4]==="Cost of Sales").map(a=>a[0]);
-  const opxC=COA.filter(a=>a[4]==="Operating Expenses").map(a=>a[0]);
-  const R=sec("REVENUE",revC), C=sec("COST OF SALES",cosC), O=sec("OPERATING EXPENSES",opxC);
-  const out=[{label:"REVENUE",total:R.tot,cls:"l0"},...R.rows,
-             {label:"COST OF SALES",total:C.tot,cls:"l0"},...C.rows,
-             {label:"GROSS PROFIT",total:R.tot-C.tot,cls:"l0"},
-             {label:"OPERATING EXPENSES",total:O.tot,cls:"l0"},...O.rows,
-             {label:"NET INCOME",total:R.tot-C.tot-O.tot,cls:"grand"}];
-  return out;
-}
+const PLVIEWS=[["total","Total — one column"],["monthly","By month"],["cumulative","By month, cumulative (YTD)"]];
 function viewPL(m){
-  const st=viewPL.st=viewPL.st||{level:3,from:"2024-01-01",to:new Date().toISOString().slice(0,10)};
-  m.appendChild(el("div","xlhead","PROFIT & LOSS — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]));
-  optRow(m,st,ch=>{Object.assign(st,ch);render();});
-  m.appendChild(xlTable(plRows(st.level,st.from,st.to)));
-  monthlyTable(m,(ms)=>{
-    const rows=[];
-    const mk=(label,codes,sign,cls)=>{ rows.push({label,cls,vals:ms.map(k=>{
-      let v=0; allLines().forEach(({e,l})=>{ if((e.date||"").slice(0,7)!==k) return; if(!codes.includes(l.code)) return;
-        v+= sign==="r" ? (+l.cr)-(+l.dr) : (+l.dr)-(+l.cr); }); return v; })}); };
-    mk("REVENUE",COA.filter(a=>a[2]==="Revenue").map(a=>a[0]),"r","l0");
-    mk("COST OF SALES",COA.filter(a=>a[4]==="Cost of Sales").map(a=>a[0]),"e","");
-    mk("OPERATING EXPENSES",COA.filter(a=>a[4]==="Operating Expenses").map(a=>a[0]),"e","");
-    rows.push({label:"NET INCOME",cls:"l0",vals:ms.map((k,i)=>rows[0].vals[i]-rows[1].vals[i]-rows[2].vals[i])});
-    return rows;
-  },"MONTHLY  ("+months()[0]+" to "+months().slice(-1)[0]+")");
+  const st=viewPL.st=viewPL.st||{level:3,view:"total",from:"2024-01-01",to:new Date().toISOString().slice(0,10)};
+  const cols=periodCols(st);
+  m.appendChild(el("div","xlhead","PROFIT & LOSS — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]+(st.view==="cumulative"?"   ·   cumulative from "+st.from:st.view==="monthly"?"   ·   month by month":"")));
+  optRow(m,st,ch=>{Object.assign(st,ch);render();},PLVIEWS);
+  m.appendChild(xlGrid(plGrid(st.level,cols),cols));
 }
-function bsRows(level,asOf){
-  const bal={}; allLines().forEach(({e,l})=>{ if(asOf&&e.date>asOf) return; bal[l.code]=(bal[l.code]||0)+(+l.dr)-(+l.cr); });
-  const acct=(c,sign,ind)=>{ const v=(bal[c]||0)*sign; const rows=[];
-    if(Math.abs(v)<0.005&&level>=3) return {v:0,rows};
-    if(level>=3){ rows.push({label:ACC[c].name,amt:v,ind,cls:"l1"});
-      if(level>=10){ const pm=partiesOf([c],null,asOf); Object.keys(pm).sort().forEach(p=>{ const pv=pm[p]*sign; if(Math.abs(pv)>=0.005) rows.push({label:p,amt:pv,ind:ind+1}); }); } }
-    return {v,rows}; };
-  const group=(title,codes,sign,ind)=>{ let tot=0; const rows=[];
-    codes.forEach(c=>{ const r=acct(c,sign,ind+1); tot+=r.v; rows.push(...r.rows); });
-    return {title,tot,rows,ind}; };
+function bsGrid(level,cols){
+  const aggs=cols.map(c=>aggregate(null,c.asOf));
   const g=n=>COA.filter(a=>a[4]===n&&a[0]!=="IC").map(a=>a[0]);
+  const rows=[];
+  const group=(title,codes,sign,ind)=>{ let tot=cols.map(()=>0); const body=[];
+    codes.forEach(c=>{ const vals=aggs.map(a=>(a.byCode[c]||0)*sign); if(!nz(vals)) return; tot=addv(tot,vals);
+      if(level>=3){ body.push({label:ACC[c].name,ind:ind+1,cls:"l1",vals});
+        if(level>=10){ const ps=new Set(); aggs.forEach(a=>Object.keys(a.byParty[c]||{}).forEach(p=>ps.add(p)));
+          [...ps].sort().forEach(p=>{ const pv=aggs.map(a=>((a.byParty[c]||{})[p]||0)*sign); if(nz(pv)) body.push({label:p,ind:ind+2,vals:pv}); }); } } });
+    return {title,tot,body,ind}; };
   const ca=group("Current Assets",g("Current Assets"),1,1), fa=group("Fixed Assets",g("Fixed Assets"),1,1), ia=group("Intangible Assets",g("Intangible Assets"),1,1);
-  const ic=(bal["IC"]||0); // intercompany (single-company views)
+  const ic=aggs.map(a=>a.byCode["IC"]||0);
   const cl=group("Current Liabilities",g("Current Liabilities"),-1,2), ll=group("Long-term Liabilities",g("Long-term Liabilities"),-1,2);
-  let ni=0; allLines().forEach(({e,l})=>{ if(asOf&&e.date>asOf) return; const a=ACC[l.code]; if(!a) return;
-    if(a.type==="Revenue") ni+=(+l.cr)-(+l.dr); else if(a.type==="Expense") ni-=(+l.dr)-(+l.cr); });
-  const sc=-(bal["3000"]||0), re=-(bal["3100"]||0), dw=-(bal["3300"]||0);
-  const assets=ca.tot+fa.tot+ia.tot+(scope!=="consolidated"?ic:0);
-  const liab=cl.tot+ll.tot, eq=sc+re+dw+ni;
-  const out=[{label:"ASSETS",total:assets,cls:"l0"}];
-  [ca,fa,ia].forEach(gr=>{ if(Math.abs(gr.tot)<0.005&&!gr.rows.length) return; out.push({label:gr.title,amt:gr.tot,ind:1,cls:"l1"}); if(level>=3) out.push(...gr.rows.map(r=>({...r,ind:r.ind+0}))); });
-  if(scope!=="consolidated"&&Math.abs(ic)>=0.005){ out.push({label:"Intercompany ("+(scope==="vyltic"?"Welltold":"Vyltic")+")",amt:ic,ind:1,cls:"l1"}); }
-  out.push({label:"LIABILITIES & OWNERS EQUITY",total:liab+eq,cls:"l0"});
-  out.push({label:"Liabilities",amt:liab,ind:1,cls:"l1"});
-  [cl,ll].forEach(gr=>{ if(Math.abs(gr.tot)<0.005&&!gr.rows.length) return; out.push({label:gr.title,amt:gr.tot,ind:2,cls:"l1"}); if(level>=3) out.push(...gr.rows); });
-  out.push({label:"Owners Equity",amt:eq,ind:1,cls:"l1"});
+  const ni=aggs.map(a=>{ let v=0; [...REVC,...COSC,...OPXC].forEach(c=>v-=(a.byCode[c]||0)); return v; });
+  const sc=aggs.map(a=>-(a.byCode["3000"]||0)), re=aggs.map(a=>-(a.byCode["3100"]||0)), dw=aggs.map(a=>-(a.byCode["3300"]||0));
+  let assets=addv(addv(ca.tot,fa.tot),ia.tot); if(scope!=="consolidated") assets=addv(assets,ic);
+  const liab=addv(cl.tot,ll.tot), eq=addv(addv(addv(sc,re),dw),ni);
+  rows.push({label:"ASSETS",cls:"l0",vals:assets});
+  [ca,fa,ia].forEach(gr=>{ if(!nz(gr.tot)&&!gr.body.length) return; rows.push({label:gr.title,ind:1,cls:"l1",vals:gr.tot}); rows.push(...gr.body); });
+  if(scope!=="consolidated"&&nz(ic)) rows.push({label:"Intercompany ("+(scope==="vyltic"?"Welltold":"Vyltic")+")",ind:1,cls:"l1",vals:ic});
+  rows.push({label:"LIABILITIES & OWNERS EQUITY",cls:"l0",vals:addv(liab,eq)});
+  rows.push({label:"Liabilities",ind:1,cls:"l1",vals:liab});
+  [cl,ll].forEach(gr=>{ if(!nz(gr.tot)&&!gr.body.length) return; rows.push({label:gr.title,ind:2,cls:"l1",vals:gr.tot}); rows.push(...gr.body); });
+  rows.push({label:"Owners Equity",ind:1,cls:"l1",vals:eq});
   if(level>=3){
-    out.push({label:"Share Capital",amt:sc,ind:2,cls:"l1"});
-    if(level>=10){ const pm=partiesOf(["3000"],null,asOf); Object.keys(pm).sort().forEach(p=>{const pv=-pm[p]; if(Math.abs(pv)>=0.005) out.push({label:p,amt:pv,ind:3});}); }
-    if(Math.abs(re)>=0.005) out.push({label:"Retained Earnings",amt:re,ind:2,cls:"l1"});
-    if(Math.abs(dw)>=0.005) out.push({label:"Owner's Draws & Buybacks",amt:dw,ind:2,cls:"l1"});
-    out.push({label:"Net income (current period)",amt:ni,ind:2,cls:"l1"});
+    rows.push({label:"Share Capital",ind:2,cls:"l1",vals:sc});
+    if(level>=10){ const ps=new Set(); aggs.forEach(a=>Object.keys(a.byParty["3000"]||{}).forEach(p=>ps.add(p)));
+      [...ps].sort().forEach(p=>{ const pv=aggs.map(a=>-((a.byParty["3000"]||{})[p]||0)); if(nz(pv)) rows.push({label:p,ind:3,vals:pv}); }); }
+    if(nz(re)) rows.push({label:"Retained Earnings",ind:2,cls:"l1",vals:re});
+    if(nz(dw)) rows.push({label:"Owner's Draws & Buybacks",ind:2,cls:"l1",vals:dw});
+    rows.push({label:"Net income (current period)",ind:2,cls:"l1",vals:ni});
   }
-  out.push({label:"BALANCE CHECK (Assets − Liab & Equity)",total:assets-liab-eq,cls:"grand"});
-  return out;
+  rows.push({label:"BALANCE CHECK (Assets − Liab & Equity)",cls:"grand",vals:subv(subv(assets,liab),eq)});
+  return rows;
 }
+const BSVIEWS=[["asat","As at date — one column"],["monthend","Month-end balances, by month"]];
 function viewBS(m){
-  const st=viewBS.st=viewBS.st||{level:3,asOf:new Date().toISOString().slice(0,10)};
-  m.appendChild(el("div","xlhead","BALANCE SHEET — AS AT "+st.asOf+"   Level "+st.level+"   ·   "+scopeLabel[scope]));
-  optRow(m,st,ch=>{Object.assign(st,ch);render();});
-  m.appendChild(xlTable(bsRows(st.level,st.asOf)));
-  monthlyTable(m,(ms)=>{
-    const rows=[["ASSETS",1,["Current Assets","Fixed Assets","Intangible Assets","Intercompany"]],
-                ["LIABILITIES",-1,["Current Liabilities","Long-term Liabilities"]],
-                ["EQUITY + NET INCOME",-1,["Equity"]]].map(([label,sign,groups])=>({label,cls:"l0",vals:ms.map(k=>{
-      const end=k+"-31"; let v=0;
-      allLines().forEach(({e,l})=>{ if(e.date>end) return; const a=ACC[l.code]; if(!a) return;
-        if(groups.includes(a.group)) v+=((+l.dr)-(+l.cr))*sign;
-        if(label.startsWith("EQUITY")&&(a.type==="Revenue"||a.type==="Expense")) v+=((+l.dr)-(+l.cr))*sign; });
-      return v; })}));
-    return rows;
-  },"MONTH-END BALANCES  ("+months()[0]+" to "+months().slice(-1)[0]+")");
+  const st=viewBS.st=viewBS.st||{level:3,view:"asat",asOf:new Date().toISOString().slice(0,10)};
+  const cols=st.view==="asat"?[{label:"As at "+st.asOf,asOf:st.asOf}]:months().filter(k=>k<=st.asOf.slice(0,7)).map(k=>({label:mlabel(k),asOf:monthEnd(k)<st.asOf?monthEnd(k):st.asOf}));
+  m.appendChild(el("div","xlhead","BALANCE SHEET — AS AT "+st.asOf+"   Level "+st.level+"   ·   "+scopeLabel[scope]+(st.view==="monthend"?"   ·   month-end balances":"")));
+  optRow(m,st,ch=>{Object.assign(st,ch);render();},BSVIEWS);
+  m.appendChild(xlGrid(bsGrid(st.level,cols),cols));
 }
-function cfRows(level,from,to){
-  const inP=e=>((!from||e.date>=from)&&(!to||e.date<=to));
-  const delta={}; allLines().forEach(({e,l})=>{ if(!inP(e)) return; delta[l.code]=(delta[l.code]||0)+(+l.dr)-(+l.cr); });
-  const cls={"Operating activities":[],"Investing activities":[],"Financing activities":[]};
-  let cash=0;
-  Object.keys(delta).forEach(c=>{ const a=ACC[c]; if(!a) return;
-    if(a.cf==="Cash"){ cash+=delta[c]; return; }
-    const contrib=-delta[c];
-    const k=a.cf==="Investing"?"Investing activities":a.cf==="Financing"?"Financing activities":"Operating activities";
-    cls[k].push({code:c,amt:contrib}); });
-  const out=[];
-  Object.keys(cls).forEach(k=>{ const tot=cls[k].reduce((s,x)=>s+x.amt,0);
-    out.push({label:k,total:tot,cls:"l0"});
-    if(level>=3) cls[k].sort((a,b)=>a.code<b.code?-1:1).forEach(x=>{ if(Math.abs(x.amt)>=0.005) out.push({label:ACC[x.code].name,amt:x.amt,ind:1,cls:"l1"}); }); });
-  out.push({label:"NET CHANGE IN CASH",total:cash,cls:"grand"});
-  const beg=(()=>{ let v=0; allLines().forEach(({e,l})=>{ if(from&&e.date>=from) return; if(ACC[l.code]&&ACC[l.code].cf==="Cash") v+=(+l.dr)-(+l.cr); }); return v; })();
-  out.push({label:"Cash at start of period",amt:beg,ind:1});
-  out.push({label:"Cash at end of period",amt:beg+cash,ind:1,cls:"l1"});
-  return out;
+function cfGrid(level,cols){
+  const aggs=cols.map(c=>aggregate(c.from,c.to));
+  const classes=[["Operating activities","Operating"],["Investing activities","Investing"],["Financing activities","Financing"]];
+  const rows=[]; let net=cols.map(()=>0);
+  classes.forEach(([title,cf])=>{ const codes=COA.filter(a=>a[5]===cf).map(a=>a[0]); let tot=cols.map(()=>0); const body=[];
+    codes.forEach(c=>{ const vals=aggs.map(a=>-(a.byCode[c]||0)); if(!nz(vals)) return; tot=addv(tot,vals);
+      if(level>=3){ body.push({label:ACC[c].name,ind:1,cls:"l1",vals});
+        if(level>=10){ const ps=new Set(); aggs.forEach(a=>Object.keys(a.byParty[c]||{}).forEach(p=>ps.add(p)));
+          [...ps].sort().forEach(p=>{ const pv=aggs.map(a=>-((a.byParty[c]||{})[p]||0)); if(nz(pv)) body.push({label:p,ind:2,vals:pv}); }); } } });
+    net=addv(net,tot); rows.push({label:title,cls:"l0",vals:tot},...body); });
+  rows.push({label:"NET CHANGE IN CASH",cls:"grand",vals:net});
+  const cashC=COA.filter(a=>a[5]==="Cash").map(a=>a[0]);
+  const beg=cols.map(c=>{ let v=0; allLines().forEach(({e,l})=>{ if(e.date>=c.from) return; if(cashC.includes(l.code)) v+=(+l.dr)-(+l.cr); }); return v; });
+  rows.push({label:"Cash at start of period",ind:1,vals:beg});
+  rows.push({label:"Cash at end of period",ind:1,cls:"l1",vals:addv(beg,net)});
+  return rows;
 }
 function viewCF(m){
-  const st=viewCF.st=viewCF.st||{level:1,from:"2024-01-01",to:new Date().toISOString().slice(0,10)};
-  m.appendChild(el("div","xlhead","CASH FLOW — "+st.from+" to "+st.to+"   (classes from the CoA ‘Cash flow’ column)   ·   "+scopeLabel[scope]));
-  optRow(m,st,ch=>{Object.assign(st,ch);render();});
-  m.appendChild(xlTable(cfRows(st.level,st.from,st.to)));
-  monthlyTable(m,(ms)=>{
-    const mk=(label,test,cls)=>({label,cls,vals:ms.map(k=>{ let v=0;
-      allLines().forEach(({e,l})=>{ if((e.date||"").slice(0,7)!==k) return; const a=ACC[l.code]; if(!a) return; if(test(a)) v+=-((+l.dr)-(+l.cr)); });
-      return v; })});
-    const rows=[mk("Operating activities",a=>a.cf==="Operating","l0"),
-                mk("Investing activities",a=>a.cf==="Investing",""),
-                mk("Financing activities",a=>a.cf==="Financing","")];
-    rows.push({label:"NET CHANGE IN CASH",cls:"l0",vals:ms.map((k,i)=>rows[0].vals[i]+rows[1].vals[i]+rows[2].vals[i])});
-    return rows;
-  },"MONTHLY  ("+months()[0]+" to "+months().slice(-1)[0]+")");
+  const st=viewCF.st=viewCF.st||{level:1,view:"total",from:"2024-01-01",to:new Date().toISOString().slice(0,10)};
+  const cols=periodCols(st);
+  m.appendChild(el("div","xlhead","CASH FLOW — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]+"   (classes from the CoA ‘Cash flow’ column)"));
+  optRow(m,st,ch=>{Object.assign(st,ch);render();},PLVIEWS);
+  m.appendChild(xlGrid(cfGrid(st.level,cols),cols));
 }
 function viewTB(m){
   const st=viewTB.st=viewTB.st||{from:"2024-01-01",to:new Date().toISOString().slice(0,10)};
@@ -547,7 +528,7 @@ function viewTB(m){
   allLines().forEach(({e,l})=>{ const a=acc[l.code]=acc[l.code]||{beg:0,d:0,c:0};
     if(e.date<st.from) a.beg+=(+l.dr)-(+l.cr);
     else if(e.date<=st.to){ a.d+=+l.dr; a.c+=+l.cr; } });
-  const w=el("div","tablewrap");
+  const w=el("div","tablewrap xlwrap");
   let h='<table class="gl" style="min-width:640px"><thead><tr><th>Code</th><th>Account</th><th class="num">Beginning</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Ending</th></tr></thead><tbody>';
   let TB=0,TD=0,TC=0,TE=0;
   Object.keys(acc).sort().forEach(c=>{ const a=acc[c],end=a.beg+a.d-a.c;
@@ -565,7 +546,7 @@ function viewGL(m){
   const q=el("input"); q.placeholder="Search text / party / #"; q.style.flex="1"; q.style.minWidth="140px";
   const exp=el("button","btn2","Export CSV");
   f.append(selM,selA,q,exp); m.appendChild(f);
-  const w=el("div","tablewrap"); m.appendChild(w);
+  const w=el("div","tablewrap xlwrap"); m.appendChild(w);
   const cnt=el("p","meta",""); m.appendChild(cnt);
   const rows=()=>{
     const mv=selM.value,av=selA.value,qv=q.value.trim().toLowerCase(); const out=[];
@@ -865,6 +846,11 @@ function viewGuide(m){
   m.appendChild(g);
 }
 
+const totop=document.getElementById("totop");
+function upd(){ const w=document.querySelector(".xlwrap"); const s=window.scrollY>500||(w&&w.scrollTop>400); totop.classList.toggle("show",!!s); }
+window.addEventListener("scroll",upd,{passive:true});
+document.addEventListener("scroll",e=>{ if(e.target&&e.target.classList&&e.target.classList.contains("xlwrap")) upd(); },true);
+totop.onclick=()=>{ document.querySelectorAll(".xlwrap").forEach(w=>w.scrollTo({top:0,behavior:"smooth"})); window.scrollTo({top:0,behavior:"smooth"}); };
 boot();
 </script>
 </body>
