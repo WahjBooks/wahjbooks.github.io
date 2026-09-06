@@ -155,6 +155,9 @@ table.gl thead th{z-index:3}
 .listcols .card h4{margin:0 0 8px;font-size:13px;font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif}
 .listcols .card div{font-size:13px;padding:2px 0;border-bottom:1px dashed var(--line)}
 .listcols .card div:last-child{border-bottom:0}
+.listcols .card form.addrow{display:flex;gap:6px;margin-top:8px}
+.listcols .card form.addrow input{flex:1;min-width:0;padding:5px 8px;font-size:13px}
+#coaadd{align-items:center}
 </style>
 </head>
 <body>
@@ -168,48 +171,15 @@ table.gl thead th{z-index:3}
 
 <script>
 "use strict";
-/* ---------- static data (mirrors the Excel CoA + Lists sheets) ---------- */
-const COA=[
-["1000","Cash","Asset","Dr","Current Assets","Cash"],["1010","Bank","Asset","Dr","Current Assets","Cash"],
-["1050","Bank Reconciliation","Asset","Dr","Current Assets","Cash"],["1100","Accounts Receivable","Asset","Dr","Current Assets","Operating"],
-["1200","Inventory","Asset","Dr","Current Assets","Operating"],["1300","Prepaid Expenses","Asset","Dr","Current Assets","Operating"],
-["1500","Property, Plant & Equipment","Asset","Dr","Fixed Assets","Investing"],["1600","Accumulated Depreciation","Asset","Cr","Fixed Assets","Investing"],
-["1710","App Development","Asset","Dr","Intangible Assets","Investing"],
-["2000","Accounts Payable","Liability","Cr","Current Liabilities","Operating"],["2100","Accrued Liabilities","Liability","Cr","Current Liabilities","Operating"],
-["2200","Taxes Payable","Liability","Cr","Current Liabilities","Operating"],["2500","Loans Payable","Liability","Cr","Long-term Liabilities","Financing"],
-["2510","Related-Party Payable","Liability","Cr","Current Liabilities","Financing"],
-["3000","Share Capital","Equity","Cr","Equity","Financing"],["3100","Retained Earnings","Equity","Cr","Equity","Financing"],
-["3300","Owner's Draws & Buybacks","Equity","Dr","Equity","Financing"],
-["4000","Revenue","Revenue","Cr","Income","Operating"],["4010","Court Rental","Revenue","Cr","Income","Operating"],
-["4020","Coaching / Academy","Revenue","Cr","Income","Operating"],["4030","Tournaments & Events","Revenue","Cr","Income","Operating"],
-["4040","Pro-shop / Merchandise","Revenue","Cr","Income","Operating"],["4050","Memberships","Revenue","Cr","Income","Operating"],
-["4060","Food & Beverage","Revenue","Cr","Income","Operating"],["4070","Sponsorship Revenue","Revenue","Cr","Income","Operating"],
-["4080","Venue Commissions","Revenue","Cr","Income","Operating"],["4090","SaaS Revenue - Venues","Revenue","Cr","Income","Operating"],
-["4100","Other Income","Revenue","Cr","Income","Operating"],["4110","Management Fee Income","Revenue","Cr","Income","Operating"],
-["4120","Consulting Income","Revenue","Cr","Income","Operating"],["4510","Retainer Fees","Revenue","Cr","Income","Operating"],
-["4520","Ad Management / Media Buying","Revenue","Cr","Income","Operating"],["4530","Content & Production","Revenue","Cr","Income","Operating"],
-["4540","Consulting / Strategy","Revenue","Cr","Income","Operating"],["4560","Event Revenue","Revenue","Cr","Income","Operating"],
-["5000","Cost of Sales","Expense","Dr","Cost of Sales","Operating"],["5010","Event Costs - Court Bookings","Expense","Dr","Cost of Sales","Operating"],
-["5020","Event Costs - Prize Pools","Expense","Dr","Cost of Sales","Operating"],["5030","Event Costs - Referees & Freelancers","Expense","Dr","Cost of Sales","Operating"],
-["5040","Event Costs - Revenue Sharing","Expense","Dr","Cost of Sales","Operating"],["5050","Event Costs - Other","Expense","Dr","Cost of Sales","Operating"],
-["5100","Salaries & Wages","Expense","Dr","Operating Expenses","Operating"],["5150","Freelancers","Expense","Dr","Operating Expenses","Operating"],
-["5200","Marketing","Expense","Dr","Operating Expenses","Operating"],["5210","Giveaways","Expense","Dr","Operating Expenses","Operating"],
-["5250","Software & Subscriptions","Expense","Dr","Operating Expenses","Operating"],["5300","Rent & Utilities","Expense","Dr","Operating Expenses","Operating"],
-["5310","Licenses & Government Fees","Expense","Dr","Operating Expenses","Operating"],["5320","Legal & Professional","Expense","Dr","Operating Expenses","Operating"],
-["5330","Travel & Transportation","Expense","Dr","Operating Expenses","Operating"],["5340","Office & General","Expense","Dr","Operating Expenses","Operating"],
-["5400","Depreciation","Expense","Dr","Operating Expenses","Operating"],["5500","Interest Expense","Expense","Dr","Operating Expenses","Operating"],
-["5900","Other Expenses","Expense","Dr","Operating Expenses","Operating"],
-["IC","Intercompany","Asset","Dr","Intercompany","Financing"]];
-const ACC={}; COA.forEach(a=>ACC[a[0]]={code:a[0],name:a[1],type:a[2],normal:a[3],group:a[4],cf:a[5]});
-const LISTS={
- "Projects":["(Overhead / none)","Padel Center - Marketing","Dante - Video","Padel Hall - Project","Padel Me - World Cup","Tropico Event","Quattro Event","Base - Video","Shami - Videos","2nd Rank Assessment","364 Major #2","3rd Rank Assessment","40Love Ahli Tournament","Al Etihad Ramadan Tour - Padel Center","Al Padel Dec-May Billing","AL-Padel Tournament","Ameed Shmeisani","App Launch - at 364","Aqaba Tournament","Aqaba Tournament - May 2026","Base Anniversary Tournament","First Rank Assessment","Ladies Tournament - 364","Mix Tour - 13 Feb - Project","Padel Arena","Padel Arena B tournament","Padel Mania Queen of Court","Padel Mania Queen of Court (Ranya)","Padel Me Major #3","PadelOn - Project Padel","Project Halloween Tournament","QoC Padel Center","Rank Assessment #4 - 364","Rank Assessment #5 - Project Padel","Tropico DJ Invitational","Tropico Dunes C-","V Major #1 - Padel Me","Vyltic x Tropico Dunes March 2026","Wepadel Queen of Courts (Ranya)","WePadel","Wheel Group at 364 Tournament"],
- "Cost/Profit Centers":["Administration","Sales","Marketing","Operations","Finance","IT"],
- "Party Types":["Customer","Vendor","Employee"],
- "Customers":["364","40 Love","ADC","Ahli Bank","Al Aman Fund","Alpadel","Arab Bank","Ayla","Base","Base Coffee","Base Padel","Bun Al Ameed","Bun Fellows","Dante (Italian Embassy)","Etihad Bank","Infinity","Leap Abu Khader","Leapmotors","Oxdog (Abu Saqr)","Padel Arena","Padel Center","Padel Mania","Padel Me","Padel Me Quattro","Padel Pro","Polaris Deserts","Project Padel","Quattro Village","Shami Athletics","T-Bone & Cheese","The Padel Hall","Tropico","Vyltic","WePadel","Wheel Group","Xcallion (Abu Saqr)","Zain","Zain Cash","Alia Academy"],
- "Vendors (Suppliers)":["Abu Salma","Adobe","Ali","Apple","Camera rental","Canva","Careem","ChatGPT","Claude","Digital Ocean","DocuSign","Domain","Dr Scent","Fadi","FigmaMake","Gamma AI","Infobip","LinkedIn","Linktree","Maktabeh","Maqsam","Naji","Notion","Padel Me World Cup - production","Padel Sanctuary","Ranya","Wael Abu Muhannad","Winning People","WRN Legal","Abdellatif AlTaan","Wiltord","Omar Shomali","Zain","Ahmad Sharqatli","Ahmad Altayeb"],
- "Employees":["Amer","Farah","Ghassan","Joud","Lama","Mazz","Mustafa","Omar","Qasem","Rami","Sami","Shefa","Yara","Ziad"],
- "Segments":["Vyltic Padel","Vyltic Marketing"],
- "Companies":["Vyltic","Welltold"]};
+/* ---------- reference data (loaded from data/coa.enc + data/lists.enc after sign-in) ---------- */
+let COA=[], LISTS={}, ACC={}, REVC=[], COSC=[], OPXC=[];
+function indexCoA(){
+  ACC={}; COA.forEach(a=>ACC[a[0]]={code:a[0],name:a[1],type:a[2],normal:a[3],group:a[4],cf:a[5]});
+  REVC=COA.filter(a=>a[2]==="Revenue").map(a=>a[0]); COSC=COA.filter(a=>a[4]==="Cost of Sales").map(a=>a[0]); OPXC=COA.filter(a=>a[4]==="Operating Expenses").map(a=>a[0]);
+}
+const GROUPS={Asset:["Current Assets","Fixed Assets","Intangible Assets"],Liability:["Current Liabilities","Long-term Liabilities"],Equity:["Equity"],Revenue:["Income"],Expense:["Cost of Sales","Operating Expenses"]};
+const TYPE_DIGIT={Asset:"1",Liability:"2",Equity:"3",Revenue:"4",Expense:"5"};
+const CFCLASSES=["Operating","Investing","Financing","Cash"];
 const RULES=`WAHJ BOOKS - BRIEFING FOR ANY AI ASSISTANT (drafting journal entries)
 
 Entity: Wahj (Jordan). Two brands in one company: Vyltic (padel events, matchmaking, venue SaaS) and Welltold ("Wiltord") (marketing agency). Currency JOD, 2 decimals. One bank pool; every line carries "co": "Vyltic" or "Welltold".
@@ -229,7 +199,7 @@ Rules:
 12. Use party names already in the books when they exist. A receipt's amount beats a remembered amount.
 13. Never draft "IC Intercompany" lines and never invent account codes.
 
-Output EXACTLY this JSON (paste it in the site's Record tab to check it balances, then send to Ahmed):
+Output EXACTLY this JSON (paste it in the site's Entry tab to check it balances; a Maker can post it, anyone else sends it to Ahmed):
 {"date":"YYYY-MM-DD","memo":"short memo","lines":[{"code":"1000","account":"Cash","party":"","desc":"","dr":0,"cr":0,"co":"Vyltic"}],"notes":"anything uncertain, else empty"}`;
 
 /* ---------- helpers ---------- */
@@ -238,22 +208,28 @@ const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!==u
 const esc=s=>String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 function toast(m,ms){const t=el("div","toast",esc(m));document.body.appendChild(t);setTimeout(()=>t.remove(),ms||3800);}
 const b64d=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
-const b64e=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
-async function sha256hex(s){const h=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,"0")).join("");}
+const b64e=b=>{const u=new Uint8Array(b);let s="";for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s);};
+const te=s=>new TextEncoder().encode(s), td=b=>new TextDecoder().decode(b);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function sha256hex(s){const h=await crypto.subtle.digest("SHA-256",te(s));return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,"0")).join("");}
+const today=()=>new Date().toISOString().slice(0,10);
+const r2=x=>Math.round((+x||0)*100+Number.EPSILON)/100;
+const xlSerial=d=>Math.round((Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10))-Date.UTC(1899,11,30))/86400000);
 
-let META=null, KEYS={}, RAW={}, WHO="", DATA={};
+let META=null, KEYS={}, RAW={}, WHO="", DATA={}, PAT="", NAMES={};
 let tab="Dashboard", scope="";
 let draft=null;
 try{ tab=localStorage.getItem("wahj.tab")||"Dashboard"; scope=localStorage.getItem("wahj.scope")||""; }catch(e){}
 const ord={vyltic:0,welltold:1,consolidated:2};
 const scopeLabel={vyltic:"Vyltic",welltold:"Welltold",consolidated:"Consolidated"};
+const COSCOPE={Vyltic:"vyltic",Welltold:"welltold"};
 const entriesArr=()=>{ const d=DATA[scope]||{}; return Object.keys(d).sort().map(k=>({id:k,e:d[k]})); };
 
 /* ---------- crypto / auth (email + password; keys unwrapped client-side) ---------- */
 let ME=null, ADMIN=null, MYEMAIL="";
 const SUPER="ahmad@vyltic.com";
-async function deriveKek(pw,salt,usages){
-  const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveBits"]);
+async function deriveKek(pw,salt){
+  const km=await crypto.subtle.importKey("raw",te(pw),"PBKDF2",false,["deriveBits"]);
   const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt,iterations:META.iter,hash:"SHA-256"},km,256);
   return new Uint8Array(bits);
 }
@@ -267,28 +243,48 @@ async function unwrapAll(u,kekRaw){
 }
 async function installKeys(rawMap){
   KEYS={}; RAW={};
-  for(const [s,b] of Object.entries(rawMap)){ RAW[s]=b; if(s!=="admin") KEYS[s]=await crypto.subtle.importKey("raw",b,{name:"AES-GCM"},false,["decrypt"]); }
+  for(const [s,b] of Object.entries(rawMap)){ RAW[s]=b; KEYS[s]=await crypto.subtle.importKey("raw",b,{name:"AES-GCM"},false,["encrypt","decrypt"]); }
+}
+const isAdmin=()=>!!KEYS.admin;
+const canMake=()=>!!KEYS.maker&&!!PAT;
+const myCompanies=()=>["vyltic","welltold"].filter(s=>KEYS[s]);
+const myScopes=()=>{ const s=myCompanies(); if(KEYS.consolidated&&s.length===2) s.push("consolidated"); return s; };
+
+/* ---------- data files: 12-byte IV + AES-GCM ciphertext ---------- */
+const GH_API=(location.hostname==="localhost"||location.hostname==="127.0.0.1")?location.origin+"/repos/WahjBooks/wahjbooks.github.io":"https://api.github.com/repos/WahjBooks/wahjbooks.github.io";
+async function fetchBlob(name){
+  if(PAT){ try{ const r=await fetch(GH_API+"/contents/data/"+name+"?t="+Date.now(),{headers:{Authorization:"Bearer "+PAT,Accept:"application/vnd.github.raw+json"}}); if(r.ok) return new Uint8Array(await r.arrayBuffer()); }catch(e){} }
+  const r=await fetch("data/"+name+"?t="+Date.now(),{cache:"no-store"}); if(!r.ok) throw new Error("Couldn’t load "+name); return new Uint8Array(await r.arrayBuffer());
+}
+async function openBytes(buf,keyName){ const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:buf.slice(0,12)},KEYS[keyName],buf.slice(12)); return JSON.parse(td(pt)); }
+async function openBlob(name,keyName){ return openBytes(await fetchBlob(name+".enc"),keyName); }
+async function sealBlob(obj,keyName){ const iv=crypto.getRandomValues(new Uint8Array(12)); const ct=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},KEYS[keyName],te(JSON.stringify(obj)))); const out=new Uint8Array(12+ct.length); out.set(iv); out.set(ct,12); return out; }
+function stripIC(e){ return Object.assign({},e,{lines:e.lines.filter(l=>l.code!=="IC")}); }
+function mergeCons(V,W){
+  const out={}; [...new Set([...Object.keys(V),...Object.keys(W)])].sort().forEach(id=>{
+    const src=V[id]||W[id]; const e=Object.assign({},src); e.lines=[...((V[id]||{}).lines||[]),...((W[id]||{}).lines||[])].filter(l=>l.code!=="IC"); out[id]=e; });
+  return out;
 }
 async function loadScope(s){
-  if(DATA[s]||!KEYS[s]) return;
-  const get=async v=>{const buf=await (await fetch("data/"+s+".enc?v="+encodeURIComponent(v))).arrayBuffer();
-    const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(META.scopes[s].iv)},KEYS[s],buf);
-    DATA[s]=JSON.parse(new TextDecoder().decode(pt));};
-  try{ await get(META.updated||"0"); }
-  catch(e){ await get(Date.now()); }
+  if(DATA[s]) return;
+  if(s==="consolidated"){ await loadScope("vyltic"); await loadScope("welltold"); DATA.consolidated=mergeCons(DATA.vyltic||{},DATA.welltold||{}); return; }
+  if(!KEYS[s]) return;
+  DATA[s]=await openBlob(s,s);
 }
-const isAdmin=()=>!!RAW.admin;
-const myScopes=()=>Object.keys(KEYS);
+async function loadRefs(){
+  if(KEYS.maker){ try{ const mk=await openBlob("maker","maker"); PAT=mk.pat||""; NAMES=mk.names||{}; }catch(e){ PAT=""; } }
+  [LISTS,COA]=await Promise.all([openBlob("lists","common"),openBlob("coa","common")]); indexCoA();
+}
 
 /* ---------- boot ---------- */
 async function boot(){
   const m=document.getElementById("main");
-  try{ META=await (await fetch("data/meta.json?t="+Date.now())).json(); }
+  try{ META=await (await fetch("data/meta.json?t="+Date.now(),{cache:"no-store"})).json(); }
   catch(e){ m.innerHTML='<div class="authbox"><h1><span class="codot"></span>Wahj Books</h1><p>Couldn’t load the data files. Check your connection and refresh.</p></div>'; return; }
   let sess=null; try{ sess=JSON.parse(sessionStorage.getItem("wahj.sess")||"null"); }catch(e){}
   if(sess&&sess.email&&sess.kek){
     const u=await findUser(sess.email);
-    if(u){ const raw=await unwrapAll(u,b64d(sess.kek)); if(raw){ MYEMAIL=sess.email; await installKeys(raw); WHO=sess.name||sess.email; return enter(); } }
+    if(u){ const raw=await unwrapAll(u,b64d(sess.kek)); if(raw){ MYEMAIL=sess.email; await installKeys(raw); WHO=sess.email; return enter(); } }
     try{ sessionStorage.removeItem("wahj.sess"); }catch(e){}
   }
   renderAuth(m);
@@ -313,7 +309,6 @@ function renderAuth(m){
     if(!raw||!Object.keys(raw).length){ err.textContent="Wrong email or password, or this email has no access."; go.disabled=false; go.textContent="Sign in"; return; }
     MYEMAIL=email; await installKeys(raw); WHO=email;
     try{ sessionStorage.setItem("wahj.sess",JSON.stringify({email,kek:b64e(kek)})); }catch(e){}
-    if(isAdmin()){ try{ await loadAdmin(); const me=ADMIN.people.find(p=>p.email===email); if(me&&me.name) WHO=me.name; }catch(e){} }
     enter();
   };
   b.appendChild(f);
@@ -321,9 +316,13 @@ function renderAuth(m){
   m.appendChild(b);
 }
 async function enter(){
-  if(!myScopes().includes(scope)) scope=myScopes().sort((a,b)=>ord[b]-ord[a])[0];
   document.getElementById("hdr").hidden=false;
-  document.getElementById("main").innerHTML='<div class="skel"></div>';
+  const m=document.getElementById("main"); m.innerHTML='<div class="skel"></div>';
+  try{ await loadRefs(); }
+  catch(e){ m.innerHTML='<div class="authbox"><h1><span class="codot"></span>Wahj Books</h1><p>Couldn’t open the reference data ('+esc(e.message)+'). Refresh, or ask an admin to re-save people & permissions.</p></div>'; return; }
+  if(NAMES[MYEMAIL]) WHO=NAMES[MYEMAIL];
+  if(!myScopes().includes(scope)) scope=myScopes().sort((a,b)=>ord[b]-ord[a])[0];
+  if(!scope){ m.innerHTML='<div class="authbox"><h1><span class="codot"></span>Wahj Books</h1><p>Your account has no company access yet. Ask an admin.</p></div>'; return; }
   await loadScope(scope);
   renderScopes(); renderTabs(); render();
 }
@@ -338,7 +337,7 @@ function renderScopes(){
     n.appendChild(b); });
 }
 function tabsList(){
-  const t=["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance","Lists","CoA","Record","Guide"];
+  const t=["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance","Lists","CoA","Entry","Guide"];
   if(isAdmin()) t.push("Admin");
   return t;
 }
@@ -352,7 +351,7 @@ function renderTabs(){
 function render(){
   const m=document.getElementById("main"); m.innerHTML="";
   if(!tabsList().includes(tab)) tab="Dashboard";
-  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Record":viewRecord,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
+  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
 }
 
 /* ---------- report engine ---------- */
@@ -416,7 +415,6 @@ function xlGrid(rows,cols){
   });
   w.appendChild(t); return w;
 }
-const REVC=COA.filter(a=>a[2]==="Revenue").map(a=>a[0]), COSC=COA.filter(a=>a[4]==="Cost of Sales").map(a=>a[0]), OPXC=COA.filter(a=>a[4]==="Operating Expenses").map(a=>a[0]);
 function plGrid(level,cols){
   const aggs=cols.map(c=>aggregate(c.from,c.to));
   const sign=c=>ACC[c].type==="Revenue"?-1:1;
@@ -435,7 +433,7 @@ function plGrid(level,cols){
 }
 const PLVIEWS=[["total","Total — one column"],["monthly","By month"],["cumulative","By month, cumulative (YTD)"]];
 function viewPL(m){
-  const st=viewPL.st=viewPL.st||{level:3,view:"total",from:"2024-01-01",to:new Date().toISOString().slice(0,10)};
+  const st=viewPL.st=viewPL.st||{level:3,view:"total",from:"2024-01-01",to:today()};
   const cols=periodCols(st);
   m.appendChild(el("div","xlhead","PROFIT & LOSS — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]+(st.view==="cumulative"?"   ·   cumulative from "+st.from:st.view==="monthly"?"   ·   month by month":"")));
   optRow(m,st,ch=>{Object.assign(st,ch);render();},PLVIEWS);
@@ -455,9 +453,10 @@ function bsGrid(level,cols){
   const ic=aggs.map(a=>a.byCode["IC"]||0);
   const cl=group("Current Liabilities",g("Current Liabilities"),-1,2), ll=group("Long-term Liabilities",g("Long-term Liabilities"),-1,2);
   const ni=aggs.map(a=>{ let v=0; [...REVC,...COSC,...OPXC].forEach(c=>v-=(a.byCode[c]||0)); return v; });
-  const sc=aggs.map(a=>-(a.byCode["3000"]||0)), re=aggs.map(a=>-(a.byCode["3100"]||0)), dw=aggs.map(a=>-(a.byCode["3300"]||0));
+  const eqc=COA.filter(a=>a[4]==="Equity").map(a=>a[0]);
+  const eqRows=eqc.map(c=>({c,vals:aggs.map(a=>-(a.byCode[c]||0))}));
   let assets=addv(addv(ca.tot,fa.tot),ia.tot); if(scope!=="consolidated") assets=addv(assets,ic);
-  const liab=addv(cl.tot,ll.tot), eq=addv(addv(addv(sc,re),dw),ni);
+  const liab=addv(cl.tot,ll.tot); let eq=ni.slice(); eqRows.forEach(r=>eq=addv(eq,r.vals));
   rows.push({label:"ASSETS",cls:"l0",vals:assets});
   [ca,fa,ia].forEach(gr=>{ if(!nz(gr.tot)&&!gr.body.length) return; rows.push({label:gr.title,ind:1,cls:"l1",vals:gr.tot}); rows.push(...gr.body); });
   if(scope!=="consolidated"&&nz(ic)) rows.push({label:"Intercompany ("+(scope==="vyltic"?"Welltold":"Vyltic")+")",ind:1,cls:"l1",vals:ic});
@@ -466,11 +465,9 @@ function bsGrid(level,cols){
   [cl,ll].forEach(gr=>{ if(!nz(gr.tot)&&!gr.body.length) return; rows.push({label:gr.title,ind:2,cls:"l1",vals:gr.tot}); rows.push(...gr.body); });
   rows.push({label:"Owners Equity",ind:1,cls:"l1",vals:eq});
   if(level>=3){
-    rows.push({label:"Share Capital",ind:2,cls:"l1",vals:sc});
-    if(level>=10){ const ps=new Set(); aggs.forEach(a=>Object.keys(a.byParty["3000"]||{}).forEach(p=>ps.add(p)));
-      [...ps].sort().forEach(p=>{ const pv=aggs.map(a=>-((a.byParty["3000"]||{})[p]||0)); if(nz(pv)) rows.push({label:p,ind:3,vals:pv}); }); }
-    if(nz(re)) rows.push({label:"Retained Earnings",ind:2,cls:"l1",vals:re});
-    if(nz(dw)) rows.push({label:"Owner's Draws & Buybacks",ind:2,cls:"l1",vals:dw});
+    eqRows.forEach(r=>{ if(!nz(r.vals)&&r.c!=="3000") return; rows.push({label:ACC[r.c].name,ind:2,cls:"l1",vals:r.vals});
+      if(level>=10){ const ps=new Set(); aggs.forEach(a=>Object.keys(a.byParty[r.c]||{}).forEach(p=>ps.add(p)));
+        [...ps].sort().forEach(p=>{ const pv=aggs.map(a=>-((a.byParty[r.c]||{})[p]||0)); if(nz(pv)) rows.push({label:p,ind:3,vals:pv}); }); } });
     rows.push({label:"Net income (current period)",ind:2,cls:"l1",vals:ni});
   }
   rows.push({label:"BALANCE CHECK (Assets − Liab & Equity)",cls:"grand",vals:subv(subv(assets,liab),eq)});
@@ -478,7 +475,7 @@ function bsGrid(level,cols){
 }
 const BSVIEWS=[["asat","As at date — one column"],["monthend","Month-end balances, by month"]];
 function viewBS(m){
-  const st=viewBS.st=viewBS.st||{level:3,view:"asat",asOf:new Date().toISOString().slice(0,10)};
+  const st=viewBS.st=viewBS.st||{level:3,view:"asat",asOf:today()};
   const cols=st.view==="asat"?[{label:"As at "+st.asOf,asOf:st.asOf}]:months().filter(k=>k<=st.asOf.slice(0,7)).map(k=>({label:mlabel(k),asOf:monthEnd(k)<st.asOf?monthEnd(k):st.asOf}));
   m.appendChild(el("div","xlhead","BALANCE SHEET — AS AT "+st.asOf+"   Level "+st.level+"   ·   "+scopeLabel[scope]+(st.view==="monthend"?"   ·   month-end balances":"")));
   optRow(m,st,ch=>{Object.assign(st,ch);render();},BSVIEWS);
@@ -502,14 +499,14 @@ function cfGrid(level,cols){
   return rows;
 }
 function viewCF(m){
-  const st=viewCF.st=viewCF.st||{level:1,view:"total",from:"2024-01-01",to:new Date().toISOString().slice(0,10)};
+  const st=viewCF.st=viewCF.st||{level:1,view:"total",from:"2024-01-01",to:today()};
   const cols=periodCols(st);
   m.appendChild(el("div","xlhead","CASH FLOW — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]+"   (classes from the CoA ‘Cash flow’ column)"));
   optRow(m,st,ch=>{Object.assign(st,ch);render();},PLVIEWS);
   m.appendChild(xlGrid(cfGrid(st.level,cols),cols));
 }
 function viewTB(m){
-  const st=viewTB.st=viewTB.st||{from:"2024-01-01",to:new Date().toISOString().slice(0,10)};
+  const st=viewTB.st=viewTB.st||{from:"2024-01-01",to:today()};
   m.appendChild(el("div","xlhead","TRIAL BALANCE — "+st.from+" to "+st.to+"   ·   "+scopeLabel[scope]));
   optRow(m,st,ch=>{Object.assign(st,ch);render();});
   const acc={};
@@ -541,7 +538,7 @@ function viewGL(m){
     entriesArr().forEach(({e})=>e.lines.forEach(l=>{
       if(mv&&(e.date||"").slice(0,7)!==mv) return;
       if(av&&l.code!==av) return;
-      if(qv&&!((e.n+" "+(l.party||"")+" "+(l.desc||"")).toLowerCase().includes(qv))) return;
+      if(qv&&!((e.n+" "+(l.party||"")+" "+(l.desc||"")+" "+(e.memo||"")).toLowerCase().includes(qv))) return;
       out.push({e,l}); }));
     return out.sort((a,b)=>a.e.date<b.e.date?1:a.e.date>b.e.date?-1:b.e.n-a.e.n);
   };
@@ -558,28 +555,115 @@ function viewGL(m){
     rows().slice().reverse().forEach(({e,l})=>rc.push([e.n,e.date,l.code,l.account,l.party||"",l.desc||"",l.dr,l.cr,l.co||""]));
     const csv=rc.map(r=>r.map(x=>{x=String(x);return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x;}).join(",")).join("\n");
     const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
-    a.download="wahj-gl-"+scope+"-"+new Date().toISOString().slice(0,10)+".csv"; a.click();
+    a.download="wahj-gl-"+scope+"-"+today()+".csv"; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   };
   [selM,selA,q].forEach(x=>x.oninput=draw); draw();
 }
+
+/* ---------- writes to the books (GitHub contents API, sha-checked; retried on conflicts) ---------- */
+async function ghGet(path){
+  const h={Authorization:"Bearer "+PAT,Accept:"application/vnd.github+json"};
+  const r=await fetch(GH_API+"/contents/"+path+"?t="+Date.now(),{headers:h});
+  if(r.status===404) return {sha:null,bytes:null};
+  if(!r.ok) throw new Error("GitHub read failed ("+r.status+")");
+  const j=await r.json();
+  if(j.content) return {sha:j.sha,bytes:b64d(j.content.replace(/\s/g,""))};
+  const r2=await fetch(GH_API+"/contents/"+path+"?t="+Date.now(),{headers:{Authorization:"Bearer "+PAT,Accept:"application/vnd.github.raw+json"}});
+  if(!r2.ok) throw new Error("GitHub read failed ("+r2.status+")");
+  return {sha:j.sha,bytes:new Uint8Array(await r2.arrayBuffer())};
+}
+async function ghPutSha(path,bytes,msg,sha){
+  const body={message:msg+"\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>",content:b64e(bytes)};
+  if(sha) body.sha=sha;
+  const r=await fetch(GH_API+"/contents/"+path,{method:"PUT",headers:{Authorization:"Bearer "+PAT,Accept:"application/vnd.github+json","Content-Type":"application/json"},body:JSON.stringify(body)});
+  return r.status;
+}
+async function ghUpdate(path,keyName,mutate,msg){
+  if(!PAT) throw new Error("You don’t have Maker access.");
+  for(let i=0;i<6;i++){
+    const {sha,bytes}=await ghGet(path);
+    let obj=bytes?(keyName?await openBytes(bytes,keyName):JSON.parse(td(bytes))):null;
+    obj=await mutate(obj);
+    const out=keyName?await sealBlob(obj,keyName):te(JSON.stringify(obj));
+    const st=await ghPutSha(path,out,msg,sha);
+    if(st===200||st===201) return obj;
+    if(st===409||st===422){ await sleep(400+Math.random()*600); continue; }
+    if(st===401||st===403) throw new Error("GitHub refused the save ("+st+") — the site’s token may have been revoked; tell Ahmed.");
+    throw new Error("GitHub write failed ("+st+")");
+  }
+  throw new Error("Too many people saving at once — try again.");
+}
+async function postEntry(e){
+  let n=0;
+  await ghUpdate("data/seq.json",null,o=>{ o=o||{next:663}; n=o.next; return {next:n+1}; },"Claim entry number");
+  const id=String(n).padStart(4,"0"); const co=e.lines[0].co; const sc=COSCOPE[co];
+  const full={n,date:e.date,serial:xlSerial(e.date),memo:e.memo||"",by:MYEMAIL,at:new Date().toISOString().slice(0,19)+"Z",lines:e.lines};
+  const data=await ghUpdate("data/"+sc+".enc",sc,o=>{ o=o||{}; o[id]=full; return o; },"Post entry #"+n+" ("+co+")");
+  DATA[sc]=data; delete DATA.consolidated; if(scope==="consolidated") await loadScope("consolidated");
+  return n;
+}
+async function addListItem(list,value){
+  LISTS=await ghUpdate("data/lists.enc","common",o=>{ o=o||LISTS; if(!o[list]) o[list]=[]; if(!o[list].some(v=>v.toLowerCase()===value.toLowerCase())) o[list].push(value); return o; },"Lists: add “"+value+"” to "+list);
+}
+async function addAccount(row){
+  COA=await ghUpdate("data/coa.enc","common",o=>{ o=o||COA; if(o.some(a=>a[0]===row[0])) throw new Error("Code "+row[0]+" already exists."); o.push(row); o.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0); return o; },"CoA: add "+row[0]+" "+row[1]);
+  indexCoA();
+}
+
+/* ---------- lists & CoA ---------- */
 function viewLists(m){
-  m.appendChild(el("div","xlhead","LISTS — dropdown values from the Entry form"));
+  m.appendChild(el("div","xlhead","LISTS — dropdown values for the Entry form"+(canMake()?"   ·   you can add to any list":"")));
   const g=el("div","listcols");
   Object.keys(LISTS).forEach(k=>{
-    const c=el("div","card"); c.appendChild(el("h4","",esc(k)));
+    const c=el("div","card"); c.appendChild(el("h4","",esc(k)+' <span class="meta">('+LISTS[k].length+')</span>'));
     LISTS[k].forEach(v=>c.appendChild(el("div","",esc(v))));
+    if(canMake()){
+      const f=el("form","addrow"); const i=el("input"); i.placeholder="Add to "+k+"…"; i.required=true; i.maxLength=80;
+      const b=el("button","btn3","Add"); b.type="submit"; f.append(i,b);
+      f.onsubmit=async ev=>{ ev.preventDefault(); const v=i.value.trim(); if(!v) return;
+        if(LISTS[k].some(x=>x.toLowerCase()===v.toLowerCase())){ toast("“"+v+"” is already in "+k+"."); return; }
+        b.disabled=true; b.textContent="Saving…";
+        try{ await addListItem(k,v); toast("Added “"+v+"” to "+k+"."); render(); }
+        catch(e){ toast("Couldn’t save: "+e.message); b.disabled=false; b.textContent="Add"; } };
+      c.appendChild(f);
+    }
     g.appendChild(c);
   });
   m.appendChild(g);
+  if(!canMake()) m.appendChild(el("p","meta","Only Makers and Admins can add to the lists — ask Ahmed if you need a name added."));
 }
 function viewCoA(m){
-  m.appendChild(el("div","xlhead","CHART OF ACCOUNTS"));
+  m.appendChild(el("div","xlhead","CHART OF ACCOUNTS"+(canMake()?"   ·   you can add accounts":"")));
   const w=el("div","tablewrap");
   let h='<table class="gl" style="min-width:700px"><thead><tr><th>Code</th><th>Account</th><th>Type</th><th>Normal</th><th>Group</th><th>Cash flow</th></tr></thead><tbody>';
   COA.forEach(a=>{ h+='<tr><td class="mono">'+esc(a[0])+'</td><td>'+esc(a[1])+'</td><td>'+esc(a[2])+'</td><td>'+esc(a[3])+'</td><td>'+esc(a[4])+'</td><td>'+esc(a[5])+'</td></tr>'; });
   w.innerHTML=h+'</tbody></table>'; m.appendChild(w);
   m.appendChild(el("p","meta","IC Intercompany exists only online, to balance cross-company entries inside a single company’s view."));
+  if(!canMake()) return;
+  m.appendChild(el("h2","sec","Add an account"));
+  const f=el("form","filters"); f.id="coaadd";
+  const code=el("input","mono"); code.placeholder="Code (4 digits)"; code.maxLength=4; code.style.width="130px"; code.required=true;
+  const name=el("input"); name.placeholder="Account name"; name.style.minWidth="220px"; name.required=true; name.maxLength=60;
+  const type=el("select"); type.innerHTML=Object.keys(GROUPS).map(t=>'<option>'+t+'</option>').join("");
+  const group=el("select"); const cf=el("select"); cf.innerHTML=CFCLASSES.map(c=>'<option>'+c+'</option>').join("");
+  const normal=el("span","meta","");
+  const syncType=()=>{ group.innerHTML=GROUPS[type.value].map(g=>'<option>'+g+'</option>').join(""); normal.textContent="Normal side: "+((type.value==="Asset"||type.value==="Expense")?"Dr":"Cr");
+    cf.value=type.value==="Asset"&&group.value!=="Current Assets"?"Investing":(type.value==="Liability"&&group.value==="Long-term Liabilities")||type.value==="Equity"?"Financing":"Operating"; };
+  type.onchange=syncType; group.onchange=syncType; syncType();
+  const b=el("button","btn","Add account"); b.type="submit";
+  f.append(code,name,type,group,cf,normal,b); m.appendChild(f);
+  m.appendChild(el("p","meta","Codes follow the Excel: 1xxx assets, 2xxx liabilities, 3xxx equity, 4xxx revenue, 5xxx expenses. The group decides where the account shows on the P&L / Balance Sheet; the cash-flow class decides its Cash Flow section."));
+  f.onsubmit=async ev=>{ ev.preventDefault();
+    const c=code.value.trim(), nmv=name.value.trim();
+    if(!/^\d{4}$/.test(c)){ toast("Code must be 4 digits."); return; }
+    if(c[0]!==TYPE_DIGIT[type.value]){ toast(type.value+" accounts start with "+TYPE_DIGIT[type.value]+"."); return; }
+    if(ACC[c]){ toast("Code "+c+" already exists ("+ACC[c].name+")."); return; }
+    if(COA.some(a=>a[1].toLowerCase()===nmv.toLowerCase())){ toast("There is already an account called “"+nmv+"”."); return; }
+    b.disabled=true; b.textContent="Saving…";
+    try{ await addAccount([c,nmv,type.value,(type.value==="Asset"||type.value==="Expense")?"Dr":"Cr",group.value,cf.value]); toast("Added "+c+" "+nmv+"."); render(); }
+    catch(e){ toast("Couldn’t save: "+e.message); b.disabled=false; b.textContent="Add account"; } };
+  if(viewCoA.focus){ viewCoA.focus=false; setTimeout(()=>{ f.scrollIntoView({behavior:"smooth"}); code.focus(); },50); }
 }
 
 /* ---------- dashboard ---------- */
@@ -611,10 +695,11 @@ function viewDash(m){
   const c2=el("div","card"); c2.appendChild(el("div","lbl","Latest entries"));
   const rec=el("div","recents");
   entriesArr().sort((a,b)=>a.e.date<b.e.date?1:a.e.date>b.e.date?-1:b.e.n-a.e.n).slice(0,9)
-    .forEach(({e})=>rec.appendChild(el("div","recent",'<span class="d mono">'+esc((e.date||"").slice(5))+'</span><span class="t">'+esc((e.lines[0]||{}).desc||"")+'</span><span class="a">'+fmt(e.lines.reduce((a,l)=>a+(+l.dr),0))+'</span>')));
+    .forEach(({e})=>rec.appendChild(el("div","recent",'<span class="d mono">'+esc((e.date||"").slice(5))+'</span><span class="t">#'+e.n+' · '+esc(e.memo||(e.lines[0]||{}).desc||"")+'</span><span class="a">'+fmt(e.lines.reduce((a,l)=>a+(+l.dr),0))+'</span>')));
   c2.appendChild(rec); duo.appendChild(c2); m.appendChild(duo);
   if(scope==="vyltic") m.appendChild(el("p","meta","“Cash — share” can be negative: the bank accounts belong to the whole entity; the other side of the pool covers the difference."));
-  m.appendChild(el("p","meta","Signed in with: "+esc(WHO)+" · books updated "+esc((META.updated||"").slice(0,10))+"."));
+  const last=entriesArr().reduce((a,{e})=>e.n>a.n?e:a,{n:0});
+  m.appendChild(el("p","meta","Signed in as "+esc(WHO)+" · "+(isAdmin()?"Admin":canMake()?"Maker":"Viewer")+(last.n?" · latest entry #"+last.n+" ("+esc(last.date)+")":"")+"."));
 }
 function chart6(){
   const wrap=el("div","chartwrap");
@@ -647,179 +732,207 @@ function chart6(){
   return wrap;
 }
 
-/* ---------- record ---------- */
-function blankLine(co){ return {code:"",party:"",desc:"",dr:"",cr:"",co:co}; }
-function viewRecord(m){
+/* ---------- entry (draft for everyone; Makers post straight into the books) ---------- */
+function blankLine(){ return {code:"",party:"",desc:"",dr:"",cr:""}; }
+function partyOptions(){
+  const s=new Set(); ["Customers","Vendors (Suppliers)","Employees"].forEach(k=>(LISTS[k]||[]).forEach(v=>s.add(v)));
+  Object.values(DATA).forEach(d=>Object.values(d||{}).forEach(e=>e.lines.forEach(l=>{ if(l.party) s.add(l.party); })));
+  return [...s].sort((a,b)=>a.localeCompare(b));
+}
+function viewEntry(m){
   const c=el("div","submitcol");
-  const defCo=scope==="welltold"?"Welltold":"Vyltic";
-  c.appendChild(el("p","meta","Build the entry here (or paste the JSON your AI drafted from the Guide briefing), check it balances, then send it to Ahmed — his Claude posts it and the site updates for everyone within a minute or two."));
-  const ta=el("textarea","raw"); ta.placeholder='Describe it, or paste AI JSON:  {"date":"2026-09-05","lines":[...]}';
+  const cos=myCompanies().map(s=>scopeLabel[s]);
+  const defCo=scope==="welltold"?"Welltold":(cos.includes("Vyltic")?"Vyltic":cos[0]);
+  c.appendChild(el("p","meta",canMake()
+    ?"Build the entry, check it balances, and post it — it goes straight into the books for everyone. Cross-company entries (Vyltic and Welltold in one entry) still go through Ahmed."
+    :"Build the entry here (or paste the JSON your AI drafted from the Guide briefing), check it balances, then send it to Ahmed — his Claude posts it and the site updates for everyone within a minute or two."));
+  const ta=el("textarea","raw"); ta.placeholder='Optional: paste AI JSON here  {"date":"2026-09-06","lines":[...]}';
   c.appendChild(ta);
   const row=el("div","actions");
-  const bParse=el("button","btn","Use it");
-  const bManual=el("button","btn2","Blank lines");
-  row.append(bParse,bManual); c.appendChild(row);
+  const bManual=el("button","btn","New entry");
+  const bParse=el("button","btn2","Use pasted JSON");
+  row.append(bManual,bParse); c.appendChild(row);
   const zone=el("div"); c.appendChild(zone); m.appendChild(c);
   const renderDraft=()=>{
     zone.innerHTML=""; if(!draft) return;
     zone.appendChild(el("h2","sec","Draft entry"));
     const meta=el("div","filters");
-    const di=el("input"); di.type="date"; di.value=draft.date; di.onchange=()=>draft.date=di.value;
-    const mi=el("input"); mi.placeholder="Memo"; mi.style.flex="1"; mi.value=draft.memo||""; mi.oninput=()=>draft.memo=mi.value;
-    meta.append(di,mi); zone.appendChild(meta);
-    const t=el("table","drafttbl"); t.innerHTML='<tr><th>Account</th><th>Party</th><th>Description</th><th class="amt">Debit</th><th class="amt">Credit</th><th>Co.</th><th></th></tr>';
+    const cosel=el("select"); cosel.innerHTML=cos.map(x=>'<option'+(x===draft.co?" selected":"")+'>'+x+'</option>').join(""); cosel.onchange=()=>draft.co=cosel.value;
+    const di=el("input"); di.type="date"; di.value=draft.date; di.max=today(); di.onchange=()=>draft.date=di.value;
+    const mi=el("input"); mi.placeholder="Memo (what this entry is)"; mi.style.flex="1"; mi.value=draft.memo||""; mi.oninput=()=>draft.memo=mi.value;
+    meta.append(el("span","flbl","Company:"),cosel,el("span","flbl","Date:"),di,mi); zone.appendChild(meta);
+    const t=el("table","drafttbl"); t.innerHTML='<tr><th>Account</th><th>Party</th><th>Description</th><th class="amt">Debit</th><th class="amt">Credit</th><th></th></tr>';
+    const opts='<option value=""></option>'+COA.filter(a=>a[0]!=="IC").map(a=>'<option value="'+a[0]+'">'+a[0]+" · "+esc(a[1])+'</option>').join("")+(canMake()?'<option value="+new">＋ New account…</option>':"");
     draft.lines.forEach((l,i)=>{
       const tr=el("tr");
-      const sel=el("select","cd"); sel.innerHTML='<option value=""></option>'+COA.map(a=>'<option value="'+a[0]+'"'+(a[0]===l.code?" selected":"")+'>'+a[0]+" · "+esc(a[1])+'</option>').join(""); sel.onchange=()=>l.code=sel.value;
-      const p=el("input"); p.value=l.party||""; p.setAttribute("list","plist"); p.oninput=()=>l.party=p.value;
-      const d=el("input"); d.value=l.desc||""; d.oninput=()=>l.desc=d.value;
-      const dr=el("input","amt"); dr.type="number"; dr.step="0.01"; dr.value=l.dr; dr.oninput=()=>{l.dr=dr.value;bal();};
-      const cr=el("input","amt"); cr.type="number"; cr.step="0.01"; cr.value=l.cr; cr.oninput=()=>{l.cr=cr.value;bal();};
-      const co=el("select","cosel"); co.innerHTML='<option'+(l.co==="Vyltic"?" selected":"")+'>Vyltic</option><option'+(l.co==="Welltold"?" selected":"")+'>Welltold</option>'; co.onchange=()=>l.co=co.value;
-      const x=el("button","btn3 danger","✕"); x.onclick=()=>{draft.lines.splice(i,1);renderDraft();};
-      [sel,p,d,dr,cr,co,x].forEach(n=>{const td=el("td");td.appendChild(n);tr.appendChild(td);});
+      const sel=el("select","cd"); sel.innerHTML=opts; sel.value=l.code||""; sel.onchange=()=>{ if(sel.value==="+new"){ sel.value=l.code||""; tab="CoA"; viewCoA.focus=true; renderTabs(); render(); return; } l.code=sel.value; };
+      const p=el("input"); p.value=l.party||""; p.setAttribute("list","plist"); p.placeholder="Party"; p.oninput=()=>l.party=p.value;
+      const d=el("input"); d.value=l.desc||""; d.placeholder="Description"; d.oninput=()=>l.desc=d.value;
+      const dr=el("input","amt"); dr.type="number"; dr.step="0.01"; dr.min="0"; dr.value=l.dr; dr.oninput=()=>{l.dr=dr.value;bal();};
+      const cr=el("input","amt"); cr.type="number"; cr.step="0.01"; cr.min="0"; cr.value=l.cr; cr.oninput=()=>{l.cr=cr.value;bal();};
+      const x=el("button","btn3 danger","✕"); x.type="button"; x.onclick=()=>{draft.lines.splice(i,1);renderDraft();};
+      [sel,p,d,dr,cr,x].forEach(n=>{const td=el("td");td.appendChild(n);tr.appendChild(td);});
       t.appendChild(tr);
     });
     zone.appendChild(t);
-    const dl=el("datalist"); dl.id="plist";
-    dl.innerHTML=[...new Set(entriesArr().flatMap(({e})=>e.lines.map(l=>l.party)).filter(Boolean))].sort().map(p=>'<option value="'+esc(p)+'">').join("");
-    zone.appendChild(dl);
-    const add=el("button","btn3","+ add line"); add.onclick=()=>{draft.lines.push(blankLine(defCo));renderDraft();}; zone.appendChild(add);
+    const dl=el("datalist"); dl.id="plist"; dl.innerHTML=partyOptions().map(p=>'<option value="'+esc(p)+'">').join(""); zone.appendChild(dl);
+    const add=el("button","btn3","+ add line"); add.onclick=()=>{draft.lines.push(blankLine());renderDraft();}; zone.appendChild(add);
+    if(canMake()){
+      const qa=el("span","meta"); qa.style.marginLeft="14px"; qa.innerHTML="New party? ";
+      const ql=el("select"); ql.innerHTML=["Customers","Vendors (Suppliers)","Employees"].map(k=>'<option>'+k+'</option>').join(""); ql.style.padding="3px 6px"; ql.style.fontSize="12px";
+      const qi=el("input"); qi.placeholder="name"; qi.style.padding="3px 6px"; qi.style.fontSize="12px"; qi.style.width="150px";
+      const qb=el("button","btn3","Add to list"); qb.type="button";
+      qb.onclick=async()=>{ const v=qi.value.trim(); if(!v) return; qb.disabled=true; try{ await addListItem(ql.value,v); toast("Added “"+v+"” to "+ql.value+"."); qi.value=""; dl.innerHTML=partyOptions().map(p=>'<option value="'+esc(p)+'">').join(""); }catch(e){ toast("Couldn’t save: "+e.message); } qb.disabled=false; };
+      qa.append(ql," ",qi," ",qb); zone.appendChild(qa);
+    }
     const br=el("div","balrow"); zone.appendChild(br);
     const out=el("pre","brief"); out.style.display="none";
     const acts=el("div","actions");
-    const bCopy=el("button","btn","Copy entry for Ahmed");
-    acts.append(bCopy); zone.appendChild(acts); zone.appendChild(out);
+    const bPost=el("button","btn","Post entry");
+    const bCopy=el("button",canMake()?"btn2":"btn",canMake()?"Copy as JSON":"Copy entry for Ahmed");
+    if(canMake()) acts.append(bPost); acts.append(bCopy); zone.appendChild(acts); zone.appendChild(out);
     if(draft.notes) zone.appendChild(el("p","meta","AI note: "+esc(draft.notes)));
-    const clean=()=>({date:draft.date,memo:draft.memo||"",requested_by:WHO,
-      lines:draft.lines.filter(l=>l.code&&((+l.dr||0)||(+l.cr||0))).map(l=>({code:l.code,account:(ACC[l.code]||{}).name||l.code,party:(l.party||"").trim(),desc:(l.desc||draft.memo||"").trim(),dr:+(+l.dr||0).toFixed(2),cr:+(+l.cr||0).toFixed(2),co:l.co||defCo})),
+    const clean=()=>({date:draft.date,memo:(draft.memo||"").trim(),requested_by:MYEMAIL,
+      lines:draft.lines.filter(l=>l.code&&((+l.dr||0)||(+l.cr||0))).map(l=>({code:l.code,account:(ACC[l.code]||{}).name||l.code,party:(l.party||"").trim(),desc:(l.desc||draft.memo||"").trim(),dr:r2(l.dr),cr:r2(l.cr),co:draft.co})),
       notes:draft.notes||""});
-    const bal=()=>{ const D=draft.lines.reduce((a,l)=>a+(+l.dr||0),0),C=draft.lines.reduce((a,l)=>a+(+l.cr||0),0),off=Math.abs(D-C)>0.004;
+    const problems=()=>{ const ls=clean().lines; const P=[];
+      if(!draft.date||draft.date>today()) P.push("date");
+      if(ls.length<2) P.push("at least two lines with an account and an amount");
+      if(draft.lines.some(l=>(+l.dr||0)&&(+l.cr||0))) P.push("a line has both debit and credit");
+      if(draft.lines.some(l=>(+l.dr||0)<0||(+l.cr||0)<0)) P.push("negative amount");
+      return P; };
+    const bal=()=>{ const D=r2(draft.lines.reduce((a,l)=>a+(+l.dr||0),0)),C=r2(draft.lines.reduce((a,l)=>a+(+l.cr||0),0)),off=Math.abs(D-C)>0.004;
       br.innerHTML='<span class="mono">Dr '+fmt(D)+'</span><span class="mono">Cr '+fmt(C)+'</span><span class="'+(off?"off":"ok")+'">'+(off?"off by "+fmt(D-C):"balanced")+'</span>';
-      bCopy.disabled=off||!D; return !off&&D>0; };
+      const ok=!off&&D>0&&!problems().length; bCopy.disabled=off||!D; bPost.disabled=!ok; return ok; };
     bal();
-    bCopy.onclick=()=>{ if(!bal())return;
+    bCopy.onclick=()=>{ if(bCopy.disabled)return;
       const j=JSON.stringify(clean(),null,1);
       out.style.display="block"; out.textContent=j;
-      if(navigator.clipboard) navigator.clipboard.writeText(j).then(()=>toast("Copied — send it to Ahmed (WhatsApp or his Claude chat)."));
-      else toast("Select and copy the JSON below, then send it to Ahmed."); };
+      if(navigator.clipboard) navigator.clipboard.writeText(j).then(()=>toast(canMake()?"Copied.":"Copied — send it to Ahmed (WhatsApp or his Claude chat)."));
+      else toast("Select and copy the JSON below."); };
+    bPost.onclick=async()=>{ if(!bal()){ toast("Fix: "+problems().join("; ")); return; }
+      const e=clean(); if(!confirm("Post entry to "+draft.co+" for "+e.date+" (Dr "+fmt(e.lines.reduce((a,l)=>a+l.dr,0))+")? This goes into the books for everyone.")) return;
+      bPost.disabled=true; bPost.textContent="Posting…";
+      try{ const n=await postEntry({date:e.date,memo:e.memo,lines:e.lines}); draft=null; renderDraft();
+        zone.appendChild(el("p","meta","Posted entry #"+n+" to "+e.lines[0].co+" — it’s in the GL and the reports now."));
+        toast("Posted entry #"+n+".",6000); }
+      catch(err){ toast("Not posted: "+err.message,7000); bPost.disabled=false; bPost.textContent="Post entry"; } };
   };
-  bManual.onclick=()=>{ draft={date:new Date().toISOString().slice(0,10),memo:"",notes:"",lines:[blankLine(defCo),blankLine(defCo)]}; renderDraft(); };
+  bManual.onclick=()=>{ draft={co:defCo,date:today(),memo:"",notes:"",lines:[blankLine(),blankLine()]}; renderDraft(); };
   bParse.onclick=()=>{
-    const txt=ta.value.trim(); if(!txt){ toast("Type or paste something first."); return; }
+    const txt=ta.value.trim(); if(!txt){ toast("Paste the JSON first."); return; }
     const j=txt.match(/\{[\s\S]*\}/);
     if(j){ try{ const o=JSON.parse(j[0]);
-        if(Array.isArray(o.lines)){ draft={date:o.date||new Date().toISOString().slice(0,10),memo:o.memo||"",notes:o.notes||"",lines:o.lines.map(l=>({code:String(l.code||""),party:l.party||"",desc:l.desc||l.descr||"",dr:l.dr||"",cr:l.cr||"",co:l.co||l.company||defCo}))}; renderDraft(); return; } }catch(e){} }
-    draft={date:new Date().toISOString().slice(0,10),memo:txt.slice(0,80),notes:"",lines:[blankLine(defCo),blankLine(defCo)]};
-    renderDraft();
-    toast("No AI JSON found — fill the lines manually, or get JSON from your AI using the Guide briefing.");
+        if(Array.isArray(o.lines)){ const cs=[...new Set(o.lines.map(l=>l.co||l.company).filter(Boolean))];
+          draft={co:cos.includes(cs[0])?cs[0]:defCo,date:o.date||today(),memo:o.memo||"",notes:(o.notes||"")+(cs.length>1?" (cross-company JSON — one company per entry here; send the rest to Ahmed)":""),lines:o.lines.map(l=>({code:String(l.code||""),party:l.party||"",desc:l.desc||l.descr||"",dr:l.dr||"",cr:l.cr||""}))}; renderDraft(); return; } }catch(e){} }
+    toast("No entry JSON found in the box.");
   };
+  if(draft) renderDraft();
 }
 
 /* ---------- admin (people & permissions; saved straight to the site via GitHub) ---------- */
-const GH={owner:"WahjBooks",repo:"wahjbooks.github.io"};
-async function ghGetSha(path,pat){
-  const r=await fetch("https://api.github.com/repos/"+GH.owner+"/"+GH.repo+"/contents/"+path+"?t="+Date.now(),{headers:{Authorization:"Bearer "+pat,Accept:"application/vnd.github+json"}});
-  if(r.status===404) return null;
-  if(!r.ok) throw new Error("GitHub read failed ("+r.status+")");
-  return (await r.json()).sha;
-}
-async function ghPut(path,bytes,msg,pat){
-  const sha=await ghGetSha(path,pat);
-  const body={message:msg+"\n\nCo-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>",content:b64e(bytes)};
-  if(sha) body.sha=sha;
-  const r=await fetch("https://api.github.com/repos/"+GH.owner+"/"+GH.repo+"/contents/"+path,{method:"PUT",headers:{Authorization:"Bearer "+pat,Accept:"application/vnd.github+json","Content-Type":"application/json"},body:JSON.stringify(body)});
-  if(!r.ok) throw new Error("GitHub write failed ("+r.status+")");
-}
 async function loadAdmin(){
   if(ADMIN) return ADMIN;
-  const k=await crypto.subtle.importKey("raw",RAW.admin,{name:"AES-GCM"},false,["decrypt","encrypt"]);
-  const buf=await (await fetch("data/admin.enc?t="+Date.now())).arrayBuffer();
-  const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64d(META.admin.iv)},k,buf);
-  ADMIN=JSON.parse(new TextDecoder().decode(pt));
+  ADMIN=await openBlob("admin","admin");
+  if(ADMIN.pat&&!PAT) PAT=ADMIN.pat;
   return ADMIN;
 }
+const wantKeys=p=>["common",...p.scopes,...((p.role==="maker"||p.admin)?["maker"]:[]),...(p.admin?["admin"]:[])];
 async function saveAdmin(msg){
   const users=[];
   for(const p of ADMIN.people){
+    if(p.scopes.includes("consolidated")&&!(p.scopes.includes("vyltic")&&p.scopes.includes("welltold"))) p.scopes=p.scopes.filter(s=>s!=="consolidated");
     const k=await kekKey(b64d(p.kek)); const keys={};
-    const want=[...p.scopes,...(p.admin?["admin"]:[])];
-    for(const s of want){ if(!RAW[s]) throw new Error("You can’t grant "+s+" — you don’t hold it yourself.");
+    for(const s of wantKeys(p)){ if(!RAW[s]) throw new Error("You can’t grant "+s+" — you don’t hold it yourself.");
       const iv=crypto.getRandomValues(new Uint8Array(12));
       keys[s]={iv:b64e(iv),ct:b64e(await crypto.subtle.encrypt({name:"AES-GCM",iv},k,RAW[s]))}; }
     users.push({ehash:await sha256hex(p.email),salt:p.salt,keys});
   }
-  const meta2=JSON.parse(JSON.stringify(META)); meta2.users=users;
-  const ak=await crypto.subtle.importKey("raw",RAW.admin,{name:"AES-GCM"},false,["encrypt"]);
-  const aiv=crypto.getRandomValues(new Uint8Array(12));
-  const aenc=await crypto.subtle.encrypt({name:"AES-GCM",iv:aiv},ak,new TextEncoder().encode(JSON.stringify(ADMIN)));
-  meta2.admin={iv:b64e(aiv)};
-  await ghPut("data/admin.enc",aenc,msg,ADMIN.pat);
-  await ghPut("data/meta.json",new TextEncoder().encode(JSON.stringify(meta2,null,1)),msg,ADMIN.pat);
-  META=meta2;
+  const meta2={v:4,iter:META.iter,updated:META.updated,users};
+  const names={}; ADMIN.people.forEach(p=>names[p.email]=p.name||"");
+  const pat=ADMIN.pat||PAT;
+  await ghUpdate("data/admin.enc","admin",()=>Object.assign({},ADMIN,{pat}),msg);
+  await ghUpdate("data/maker.enc","maker",o=>Object.assign(o||{},{pat,names}),msg);
+  await ghUpdate("data/meta.json",null,()=>meta2,msg);
+  META=meta2; NAMES=names;
 }
 function genPassword(){ const a="abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"; const r=crypto.getRandomValues(new Uint8Array(12)); return [...r].map((x,i)=>a[x%a.length]+(i===3||i===7?"-":"")).join(""); }
 async function setPassword(p,pw){ if(!p.salt) p.salt=b64e(crypto.getRandomValues(new Uint8Array(16))); p.kek=b64e(await deriveKek(pw,b64d(p.salt))); }
+function scopeTicks(p,onchange){
+  const td=el("span"); const cbs={};
+  ["vyltic","welltold","consolidated"].forEach(s=>{ const lab=el("label"); const cb=el("input"); cb.type="checkbox"; cbs[s]=cb; cb.checked=p.scopes.includes(s);
+    lab.appendChild(cb); lab.append(" "+scopeLabel[s]); lab.title=s==="consolidated"?"Needs both companies":""; td.appendChild(lab);
+    cb.onchange=()=>{ p.scopes=cb.checked?[...new Set([...p.scopes,s])]:p.scopes.filter(x=>x!==s); sync(); if(onchange) onchange(); }; });
+  const sync=()=>{ const both=p.scopes.includes("vyltic")&&p.scopes.includes("welltold");
+    if(!both&&p.scopes.includes("consolidated")){ p.scopes=p.scopes.filter(x=>x!=="consolidated"); cbs.consolidated.checked=false; }
+    cbs.consolidated.disabled=!both||!RAW.consolidated; cbs.vyltic.disabled=!RAW.vyltic; cbs.welltold.disabled=!RAW.welltold; };
+  sync(); return td;
+}
+function roleSelect(p){
+  const s=el("select"); s.innerHTML='<option value="viewer">Viewer</option><option value="maker">Maker</option>';
+  const sync=()=>{ if(p.admin) p.role="maker"; s.value=p.role||"viewer"; s.disabled=!!p.admin||!RAW.maker; s.title=p.admin?"Admins are always Makers":""; };
+  s.onchange=()=>{ p.role=s.value; }; sync(); s.sync=sync; return s;
+}
 function viewAdmin(m){
   const c=el("div");
-  c.appendChild(el("p","meta","Add people with their email and a first password, tick what they see, and mark admins. Tell them their password (they use it on the sign-in page); reset it here any time. Changes go live for everyone in about a minute."));
+  c.appendChild(el("p","meta","Add people with their email and a first password, tick what they see, pick their role, and mark admins. Viewer = reads the reports. Maker = also posts entries and adds to the lists and the chart of accounts. Admin = Maker plus this screen. Changes go live for everyone in about a minute."));
   const zone=el("div"); c.appendChild(zone); m.appendChild(c);
   loadAdmin().then(()=>{
     zone.innerHTML="";
-    const t=el("table","admtbl"); t.innerHTML='<tr><th>Person</th><th>Email</th><th>Sees</th><th>Admin</th><th></th></tr>';
+    const t=el("table","admtbl"); t.innerHTML='<tr><th>Person</th><th>Email</th><th>Sees</th><th>Role</th><th>Admin</th><th></th></tr>';
     ADMIN.people.forEach((p,idx)=>{
+      p.role=p.role||(p.admin?"maker":"viewer");
       const tr=el("tr");
       const nm=el("input"); nm.value=p.name||""; nm.placeholder="name"; nm.onchange=()=>p.name=nm.value.trim();
       const td1=el("td"); td1.appendChild(nm); tr.appendChild(td1);
       tr.appendChild(el("td","mono",esc(p.email)));
-      const td3=el("td");
-      ["vyltic","welltold","consolidated"].forEach(s=>{ const lab=el("label"); const cb=el("input"); cb.type="checkbox"; cb.checked=p.scopes.includes(s); cb.disabled=!RAW[s];
-        cb.onchange=()=>{ p.scopes=cb.checked?[...new Set([...p.scopes,s])]:p.scopes.filter(x=>x!==s); }; lab.appendChild(cb); lab.append(" "+scopeLabel[s]); td3.appendChild(lab); });
-      tr.appendChild(td3);
-      const td4=el("td"); const adm=el("input"); adm.type="checkbox"; adm.checked=!!p.admin; adm.disabled=(p.email===SUPER); adm.onchange=()=>p.admin=adm.checked; td4.appendChild(adm); tr.appendChild(td4);
-      const td5=el("td"); const acts=el("div","actions"); acts.style.marginTop="0";
+      const td3=el("td"); td3.appendChild(scopeTicks(p)); tr.appendChild(td3);
+      const td4=el("td"); const rs=roleSelect(p); td4.appendChild(rs); tr.appendChild(td4);
+      const td5=el("td"); const adm=el("input"); adm.type="checkbox"; adm.checked=!!p.admin; adm.disabled=(p.email===SUPER)||!RAW.admin; adm.onchange=()=>{ p.admin=adm.checked; rs.sync(); }; td5.appendChild(adm); tr.appendChild(td5);
+      const td6=el("td"); const acts=el("div","actions"); acts.style.marginTop="0";
       const rp=el("button","btn3","Reset password");
       rp.onclick=async()=>{ const pw=prompt("New password for "+(p.name||p.email)+" (10+ characters):",genPassword()); if(!pw) return; if(pw.length<10){ toast("Use at least 10 characters."); return; }
         await setPassword(p,pw); toast("Password set — click Save changes, then tell them: "+pw,9000); };
       const rm=el("button","btn3 danger","Remove"); rm.disabled=(p.email===SUPER);
       rm.onclick=()=>{ if(confirm("Remove "+(p.name||p.email)+"’s access?")){ ADMIN.people.splice(idx,1); render(); } };
-      acts.append(rp,rm); td5.appendChild(acts); tr.appendChild(td5);
+      acts.append(rp,rm); td6.appendChild(acts); tr.appendChild(td6);
       t.appendChild(tr);
     });
     const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
     zone.appendChild(el("h2","sec","Add a person"));
     const f=el("div","filters");
-    const nname=el("input"); nname.placeholder="Name";
+    const np={name:"",email:"",scopes:[],role:"viewer",admin:false};
+    const nname=el("input"); nname.placeholder="Name"; nname.oninput=()=>np.name=nname.value.trim();
     const nemail=el("input"); nemail.type="email"; nemail.placeholder="email@example.com"; nemail.style.minWidth="210px";
     const npw=el("input"); npw.placeholder="First password (10+ chars)"; npw.value=genPassword(); npw.className="mono"; npw.style.minWidth="170px";
-    const nb={}; const sc=el("span");
-    ["vyltic","welltold","consolidated"].forEach(s=>{ const lab=el("label"); lab.style.marginRight="10px"; const cb=el("input"); cb.type="checkbox"; cb.disabled=!RAW[s]; nb[s]=cb; lab.appendChild(cb); lab.append(" "+scopeLabel[s]); sc.appendChild(lab); });
-    const nadm=el("label"); const nacb=el("input"); nacb.type="checkbox"; nadm.appendChild(nacb); nadm.append(" Admin");
+    const nrole=roleSelect(np);
+    const nadm=el("label"); const nacb=el("input"); nacb.type="checkbox"; nacb.disabled=!RAW.admin; nacb.onchange=()=>{ np.admin=nacb.checked; nrole.sync(); }; nadm.appendChild(nacb); nadm.append(" Admin");
     const add=el("button","btn2","Add");
-    f.append(nname,nemail,npw,sc,nadm,add); zone.appendChild(f);
+    f.append(nname,nemail,npw,scopeTicks(np),nrole,nadm,add); zone.appendChild(f);
     add.onclick=async()=>{ const em=nemail.value.trim().toLowerCase(); if(!em.includes("@")){ toast("Enter a valid email."); return; }
       if(ADMIN.people.some(p=>p.email===em)){ toast("That email is already in the list."); return; }
-      const scopes=Object.keys(nb).filter(s=>nb[s].checked); if(!scopes.length){ toast("Tick at least one company."); return; }
+      if(!np.scopes.length){ toast("Tick at least one company."); return; }
       if(npw.value.length<10){ toast("Password: at least 10 characters."); return; }
-      const p={name:nname.value.trim(),email:em,scopes,admin:nacb.checked}; await setPassword(p,npw.value); ADMIN.people.push(p);
+      const p={name:np.name,email:em,scopes:np.scopes.slice(),role:np.admin?"maker":np.role,admin:np.admin}; await setPassword(p,npw.value); ADMIN.people.push(p);
       toast("Added. Click Save changes, then tell "+(p.name||em)+" their password: "+npw.value,9000); render(); };
     const acts=el("div","actions");
     const save=el("button","btn","Save changes");
     save.onclick=async()=>{ save.disabled=true; save.textContent="Saving…";
       try{ await saveAdmin("Update people & permissions"); toast("Saved — live within a minute."); }
-      catch(e){ toast("Save failed: "+e.message); }
+      catch(e){ toast("Save failed: "+e.message,7000); }
       save.disabled=false; save.textContent="Save changes"; };
     acts.append(save); zone.appendChild(acts);
-    zone.appendChild(el("p","meta","Passwords are never stored — the site derives a key from them. Keep them 10+ characters. Ahmed’s own admin access can’t be removed."));
+    zone.appendChild(el("p","meta","Passwords are never stored — the site derives a key from them. Keep them 10+ characters. Consolidated needs both companies ticked. Ahmed’s own admin access can’t be removed."));
   }).catch(e=>{ zone.innerHTML=""; zone.appendChild(el("p","meta","Couldn’t open the people register: "+esc(e.message))); });
 }
 
 /* ---------- guide ---------- */
 function viewGuide(m){
   const g=el("div","guide");
-  g.innerHTML='<h3>What this is</h3><p>The live books of <strong>Wahj</strong> — Vyltic and Welltold — with the same sheets as the Excel: P&amp;L, Balance Sheet, Cash Flow, GL, Trial Balance, Lists and CoA. What you can see is set per person by Ahmed (Vyltic, Welltold, or everything).</p>'
-  +'<h3>Signing in</h3><p>Email and password, like any site. An admin adds you and gives you your first password; what you can see is whatever was set for your email. Forgot it? An admin resets it in seconds.</p>'
-  +'<h3>How entries get in</h3><p>Send receipts and amounts to Ahmed as usual, or build a draft in the <strong>Record</strong> tab (your own AI can draft it — copy the briefing below into any AI chat). Ahmed&rsquo;s Claude posts it; the site updates for everyone within a minute.</p>'
+  g.innerHTML='<h3>What this is</h3><p>The live books of <strong>Wahj</strong> — Vyltic and Welltold — with the same sheets as the Excel: P&amp;L, Balance Sheet, Cash Flow, GL, Trial Balance, Lists and CoA. What you can see is set per person by an admin (Vyltic, Welltold, or both plus the consolidated view).</p>'
+  +'<h3>Signing in</h3><p>Email and password, like any site. An admin adds you and gives you your first password. Forgot it? An admin resets it in seconds.</p>'
+  +'<h3>Roles</h3><p><strong>Viewer</strong> reads the reports and can draft an entry to send to Ahmed. <strong>Maker</strong> also posts entries straight into the books (Entry tab), adds names to the Lists and adds accounts to the CoA. <strong>Admin</strong> is a Maker who also manages people in the Admin tab.</p>'
+  +'<h3>Posting an entry</h3><p>Entry tab → New entry → pick the company and date, add the lines, make sure it says <em>balanced</em>, then <strong>Post entry</strong>. It gets the next number and shows in the GL and every report at once (other people see it on their next refresh). Cross-company entries, month-end items and corrections still go through Ahmed — there is no delete; a mistake is fixed with a reversing entry.</p>'
   +'<h3>Reading the numbers</h3><p>Cash is one pooled bank balance for the whole entity — a company&rsquo;s share can be negative (the other side funds it). Lines marked <code>IC Intercompany</code> only balance cross-company entries inside a single-company view. The Welltold profit share (⅓ Joud + ⅓ Rami of the monthly net) is booked centrally at month-end.</p>'
   +'<h3>Briefing for your AI</h3>';
   const cp=el("button","btn2","Copy AI briefing"); cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(RULES).then(()=>toast("Copied."));};
