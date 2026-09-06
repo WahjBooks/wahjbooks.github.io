@@ -160,6 +160,13 @@ table.gl thead th{z-index:3}
 #coaadd{align-items:center}
 .admtbl .num{text-align:right}
 .admtbl th.num{text-align:right}
+.admtbl .nowrap{white-space:nowrap}
+table.assets{min-width:1560px}
+table.assets .btn3{padding:3px 6px;font-size:12px}
+table.assets td{padding:5px 6px;font-size:12.5px}
+table.assets th{white-space:nowrap}
+table.assets input{padding:4px 6px;font-size:12.5px}
+table.assets .pill{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -343,6 +350,7 @@ function renderScopes(){
 }
 function tabsList(){
   const t=["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance","Lists","CoA","Entry"];
+  if(assetsOK()) t.push("Assets");
   if(closingOK()) t.push("Employees","Closing");
   t.push("Guide"); if(isAdmin()) t.push("Admin");
   return t;
@@ -357,7 +365,7 @@ function renderTabs(){
 function render(){
   const m=document.getElementById("main"); m.innerHTML="";
   if(!tabsList().includes(tab)) tab="Dashboard";
-  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Employees":viewEmployees,"Closing":viewClosing,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
+  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Assets":viewAssets,"Employees":viewEmployees,"Closing":viewClosing,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
 }
 
 /* ---------- report engine ---------- */
@@ -864,7 +872,7 @@ function refreshAssets(c,entries){
   const have=new Set(c.assets.map(a=>a.src)); let added=0;
   entries.forEach(e=>e.lines.forEach((l,i)=>{ if(l.code!=="1500") return; const src=e.n+":"+i; if(have.has(src)) return;
     const cost=r2((+l.dr)-(+l.cr)); const cat=l.party||"(uncategorised)";
-    c.assets.push({id:"a"+Math.random().toString(36).slice(2,8),src,n:e.n,date:e.date,start:e.date.slice(0,7),category:cat,desc:l.desc||"",cost,co:l.co||"Vyltic",life:cost>0?(DEFAULT_LIVES[cat]||0):(DEFAULT_LIVES[cat]||0)}); added++; }));
+    c.assets.push({id:"a"+Math.random().toString(36).slice(2,8),src,n:e.n,date:e.date,start:e.date.slice(0,7),ready:e.date,salvage:0,category:cat,desc:l.desc||"",cost,co:l.co||"Vyltic",life:DEFAULT_LIVES[cat]||0}); added++; }));
   c.assets.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.n-b.n);
   return added;
 }
@@ -873,7 +881,7 @@ async function loadClosing(){
   const entries=await ledgerAll();
   try{ CLOSING=await openBlob("closing","consolidated"); }catch(e){ CLOSING=null; }
   if(!CLOSING||!CLOSING.employees){ CLOSING=seedClosing(entries); CLOSING.unsaved=true; }
-  CLOSING.runs=CLOSING.runs||{}; CLOSING.settings=Object.assign({shareRate:1/3,shareParties:["Joud","Rami"],shareAccount:"5040",depAccount:"5400",accDepAccount:"1600",salaryAccount:"5100",carryForward:false},CLOSING.settings||{});
+  CLOSING.runs=CLOSING.runs||{}; CLOSING.settings=Object.assign({shareRate:1/3,shareParties:["Joud","Rami"],shareAccount:"5040",depAccount:"5400",accDepAccount:"1600",salaryAccount:"5100",carryForward:false,disposalGain:"4100",disposalLoss:"5900",cashAccount:"1000",ppeAccount:"1500"},CLOSING.settings||{});
   return CLOSING;
 }
 async function saveClosing(msg){
@@ -1005,33 +1013,25 @@ function secSalaries(zone,c,entries,mo){
   zone.appendChild(acts);
 }
 function depPlan(c,mo){
-  const mi=monthIdx(mo); const rows=[];
-  c.assets.forEach(a=>{ const life=+a.life||0; if(!life||!a.cost) { rows.push({a,monthly:0,charge:0,catchup:0,booked:0,k:0}); return; }
-    const k=mi-monthIdx(a.start)+1; const monthly=r2(a.cost/life);
-    const due=n=>n<=0?0:n>=life?r2(a.cost):r2(monthly*n);
-    let booked=0; Object.keys(c.runs).forEach(m=>{ if(m<mo&&c.runs[m].depreciation&&c.runs[m].depreciation.assets) booked+=(+c.runs[m].depreciation.assets[a.id]||0); }); booked=r2(booked);
-    const charge=k<1||k>life?0:r2(due(k)-due(k-1)); const catchup=r2(due(Math.min(k-1,life))-booked);
-    rows.push({a,monthly,charge,catchup:a.cost<0?catchup:Math.max(0,catchup),booked,k}); });
-  return rows;
+  return c.assets.filter(a=>!a.linked&&a.cost>0).map(a=>Object.assign({a},assetSched(c,a,mo)));
 }
 function secDepreciation(zone,c,entries,mo){
   const end=monthEnd(mo); const done=(c.runs[mo]||{}).depreciation;
   zone.appendChild(el("h2","sec","2 · Depreciation — "+monthName(mo)));
-  const added=refreshAssets(c,entries); if(added) zone.appendChild(el("p","meta",added+" new fixed-asset line(s) picked up from the books — set their useful life below."));
-  const rows=depPlan(c,mo);
-  const t=el("table","admtbl"); t.innerHTML='<tr><th>Bought</th><th>Category</th><th>Description</th><th>Co.</th><th class="num">Cost</th><th>Life (months)</th><th class="num">Monthly</th><th class="num">Booked before</th><th class="num">Catch-up</th><th class="num">This month</th></tr>';
+  const added=refreshAssets(c,entries); if(added) zone.appendChild(el("p","meta",added+" new asset line(s) picked up from the books — set their useful life in the Assets tab."));
+  const rows=depPlan(c,mo).filter(r=>r.monthly>0.004||r.catchup>0.004||r.charge>0.004||r.booked>0.004);
+  const t=el("table","admtbl"); t.innerHTML='<tr><th>Bought</th><th>Asset</th><th>Category</th><th>Co.</th><th class="num">Cost</th><th>Life</th><th class="num">Monthly</th><th class="num">Booked before</th><th class="num">Catch-up</th><th class="num">This month</th><th>Status</th></tr>';
   let tot=0,cu=0;
-  rows.forEach(r=>{ const a=r.a; const tr=el("tr");
-    tr.appendChild(el("td","mono",esc(a.date))); tr.appendChild(el("td","",esc(a.category))); tr.appendChild(el("td","",esc(a.desc))); tr.appendChild(el("td","",'<span class="pill '+(a.co==="Vyltic"?"vy":"we")+'">'+a.co[0]+'</span>'));
-    tr.appendChild(el("td","num mono",fmt(a.cost)));
-    const li=el("input","amt mono"); li.type="number"; li.min="0"; li.step="1"; li.value=a.life||0; li.style.width="80px"; li.title="0 = not depreciated"; li.onchange=()=>{ a.life=Math.max(0,Math.round(+li.value||0)); render(); }; const td=el("td"); td.appendChild(li); tr.appendChild(td);
+  rows.forEach(r=>{ const a=r.a; const tr=el("tr"); const s=assetStatus(c,a);
+    tr.appendChild(el("td","mono",esc(a.date))); tr.appendChild(el("td","",esc(a.desc))); tr.appendChild(el("td","",esc(a.category))); tr.appendChild(el("td","",'<span class="pill '+(a.co==="Vyltic"?"vy":"we")+'">'+a.co[0]+'</span>'));
+    tr.appendChild(el("td","num mono",fmt(a.cost))); tr.appendChild(el("td","mono",(a.life||0)+" m"+((+a.salvage)?" · salvage "+fmt(a.salvage):"")));
     tr.appendChild(el("td","num mono",r.monthly?fmt(r.monthly):"·")); tr.appendChild(el("td","num mono",r.booked?fmt(r.booked):"·")); tr.appendChild(el("td","num mono",r.catchup?fmt(r.catchup):"·")); tr.appendChild(el("td","num mono",r.charge?fmt(r.charge):"·"));
+    tr.appendChild(el("td","meta",esc(s.label)));
     tot+=r.charge; cu+=r.catchup; t.appendChild(tr); });
-  const tr=el("tr"); tr.style.fontWeight="700"; tr.innerHTML='<td colspan="8">TOTAL</td><td class="num mono">'+fmt(cu)+'</td><td class="num mono">'+fmt(tot)+'</td>'; t.appendChild(tr);
+  const tr=el("tr"); tr.style.fontWeight="700"; tr.innerHTML='<td colspan="8">TOTAL</td><td class="num mono">'+fmt(cu)+'</td><td class="num mono">'+fmt(tot)+'</td><td></td>'; t.appendChild(tr);
   const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
-  zone.appendChild(el("p","meta","Straight-line from the month of purchase. Life 0 = not depreciated (consumables, deposits, mis-postings). App Development (1710) is not depreciated here. Catch-up = months before "+monthName(mo)+" that were never booked."));
+  zone.appendChild(el("p","meta","Straight-line on cost − salvage from the month each asset is ready for use, stopping the month before a sale or retirement. Lives, ready dates, salvage and disposals are managed in the Assets tab. Catch-up = months before "+monthName(mo)+" never booked."));
   const acts=el("div","actions");
-  const sv=el("button","btn2","Save lives"); sv.onclick=async()=>{ sv.disabled=true; try{ await saveClosing("Closing: asset lives"); toast("Saved."); }catch(e){ toast("Save failed: "+e.message,7000); } sv.disabled=false; }; acts.appendChild(sv);
   if(done) acts.appendChild(el("span","meta","Booked for this month: "+fmt(done.amount)+" — entries #"+(done.entries||[]).join(", #")+(done.catchup?" (incl. catch-up "+fmt(done.catchup)+")":"")+"."));
   else if(tot>0.004||cu>0.004){
     const lab=el("label"); const cb=el("input"); cb.type="checkbox"; cb.checked=false; lab.appendChild(cb); lab.append(" include catch-up for earlier months ("+fmt(cu)+")");
@@ -1051,7 +1051,7 @@ function secDepreciation(zone,c,entries,mo){
         toast("Booked depreciation — entry #"+ns.join(", #")+".",7000); DATA.consolidated=null; render(); }
       catch(e){ toast("Not posted: "+e.message,8000); b.disabled=false; b.textContent="Run depreciation for "+monthName(mo); } };
     acts.append(lab,b);
-  } else acts.appendChild(el("span","meta","Nothing to depreciate this month — set useful lives above."));
+  } else acts.appendChild(el("span","meta","Nothing to depreciate this month — set useful lives in the Assets tab."));
   zone.appendChild(acts);
 }
 function shareBasis(entries,mo){
@@ -1093,6 +1093,143 @@ function secShare(zone,c,entries,mo){
   else acts.appendChild(el("span","meta",b.net<0?"Loss month ("+fmt(b.net)+") — no share accrues.":"Nothing to share this month."));
   zone.appendChild(acts);
   zone.appendChild(el("p","meta","Net = Welltold revenue − delivery costs (5150/5900) − Welltold salaries (5100). Each partner gets ⅓ of a positive net, booked to "+s.shareAccount+" "+esc(ACC[s.shareAccount]?ACC[s.shareAccount].name:"")+" and owed on 2000 until you tick Paid."));
+}
+
+/* ---------- fixed assets: register, lives, ready-for-use, disposals ---------- */
+const assetsOK=()=>!!KEYS.consolidated;
+const ASSET_DEFAULTS={disposalGain:"4100",disposalLoss:"5900",cashAccount:"1000",ppeAccount:"1500"};
+function assetNorm(a){ if(!a.ready) a.ready=a.date; if(a.salvage==null) a.salvage=0; return a; }
+function assetStart(a){ return monthIdx((a.ready||a.date).slice(0,7)); }
+function assetDispIdx(a){ return a.disposal?monthIdx(a.disposal.date.slice(0,7)):Infinity; }
+function assetBooked(c,a,beforeMo){ let b=0; Object.keys(c.runs||{}).forEach(m=>{ if((!beforeMo||m<beforeMo)&&c.runs[m].depreciation&&c.runs[m].depreciation.assets) b+=(+c.runs[m].depreciation.assets[a.id]||0); }); return r2(b); }
+function assetSched(c,a,mo){
+  assetNorm(a); const life=Math.max(0,Math.round(+a.life||0)), base=r2((+a.cost||0)-(+a.salvage||0));
+  const booked=assetBooked(c,a,mo);
+  if(a.linked||!life||base<=0.004||a.cost<=0) return {monthly:0,charge:0,catchup:0,booked,k:0};
+  const start=assetStart(a), disp=assetDispIdx(a), mi=monthIdx(mo);
+  const monthly=r2(base/life);
+  if(a.disposal) return {monthly,charge:0,catchup:0,booked,k:0}; // once sold/retired nothing more is booked — the disposal entry took what was booked at the time
+  const due=n=>n<=0?0:n>=life?base:r2(monthly*n);
+  const kEff=m=>Math.max(0,Math.min(m-start+1,disp-start));
+  const k=kEff(mi), kPrev=kEff(mi-1);
+  return {monthly,charge:r2(due(k)-due(kPrev)),catchup:Math.max(0,r2(due(kPrev)-booked)),booked,k};
+}
+function assetStatus(c,a){
+  assetNorm(a);
+  if(a.linked) return {key:"linked",label:"linked to a disposal"};
+  if(a.cost<0) return {key:"credit",label:"disposal credit — link it to an asset"};
+  if(a.disposal) return {key:a.disposal.type,label:(a.disposal.type==="sold"?"Sold ":"Retired ")+a.disposal.date+(a.disposal.remaining>0.004?" — "+fmt(a.disposal.remaining)+" still on 1500":"")};
+  if(a.ready>today()) return {key:"notready",label:"not yet in use (from "+a.ready+")"};
+  if(!(+a.life)) return {key:"nodep",label:"not depreciated"};
+  const booked=assetBooked(c,a), base=r2(a.cost-(+a.salvage||0));
+  if(booked>=base-0.004) return {key:"full",label:"fully depreciated"};
+  const s=assetSched(c,a,idxMonth(monthIdx(thisMonth())-1));
+  return {key:"inuse",label:"in use"+(s.catchup>0.004?" · behind "+fmt(s.catchup):"")};
+}
+function assetNBV(c,a){ if(a.disposal||a.linked||a.cost<=0) return 0; return r2((+a.cost||0)-assetBooked(c,a)); }
+function askDate(label){ const d=prompt(label,today()); if(!d) return null; if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){ toast("Date must be YYYY-MM-DD."); return null; } return d; }
+async function disposeAsset(c,a,type){
+  const s=Object.assign({},ASSET_DEFAULTS,c.settings);
+  const date=askDate((type==="sold"?"Date sold":"Date retired / written off")+" (YYYY-MM-DD):"); if(!date) return;
+  if(date<a.date){ toast("Disposal date is before the purchase date."); return; }
+  let proceeds=0;
+  if(type==="sold"){ const p=prompt("Sale proceeds received in cash for “"+a.desc+"”:","0"); if(p===null) return; proceeds=r2(p); if(!(proceeds>=0)){ toast("Proceeds must be 0 or more."); return; } }
+  const booked=assetBooked(c,a), cost=r2(a.cost), result=r2(proceeds+booked-cost);
+  const behind=assetSched(c,a,date.slice(0,7)).catchup;
+  const d=(type==="sold"?"Sale of ":"Retirement of ")+a.desc; const cat=a.category, co=a.co;
+  const msg=(type==="sold"?"Sell":"Retire")+" “"+a.desc+"” on "+date+"?\n\nCost "+fmt(cost)+"\nDepreciation booked "+fmt(booked)+(behind>0.004?" (depreciation is "+fmt(behind)+" behind — run Closing first if you want it in depreciation instead of the loss)":"")+"\nProceeds "+fmt(proceeds)+"\n"+(result<-0.004?"Loss "+fmt(-result)+" → "+s.disposalLoss:result>0.004?"Gain "+fmt(result)+" → "+s.disposalGain:"No gain or loss")+"\n\nThis posts the disposal entry to the books.";
+  if(!confirm(msg)) return;
+  const lines=[];
+  if(proceeds>0.004) lines.push({code:s.cashAccount,account:ACC[s.cashAccount].name,party:"",desc:d+" — proceeds",dr:proceeds,cr:0,co});
+  if(booked>0.004) lines.push({code:s.accDepAccount,account:ACC[s.accDepAccount].name,party:cat,desc:d+" — accumulated depreciation removed",dr:booked,cr:0,co});
+  if(result<-0.004) lines.push({code:s.disposalLoss,account:ACC[s.disposalLoss].name,party:cat,desc:d+" — loss on disposal",dr:r2(-result),cr:0,co});
+  if(result>0.004) lines.push({code:s.disposalGain,account:ACC[s.disposalGain].name,party:cat,desc:d+" — gain on disposal",dr:0,cr:result,co});
+  lines.push({code:s.ppeAccount,account:ACC[s.ppeAccount].name,party:cat,desc:d+" — cost removed",dr:0,cr:cost,co});
+  const n=await postEntry({date,memo:d,lines});
+  a.disposal={date,type,proceeds,entry:n,bookedDep:booked,result};
+  try{ await saveClosing("Assets: "+d); }catch(e){}
+  toast((type==="sold"?"Sold":"Retired")+" — entry #"+n+".",7000);
+}
+async function writeOffRemaining(c,a){
+  const s=Object.assign({},ASSET_DEFAULTS,c.settings); const rem=r2(a.disposal.remaining||0); if(rem<=0.004) return;
+  const date=askDate("Date for the write-off of the remaining "+fmt(rem)+" (YYYY-MM-DD):"); if(!date) return;
+  const d="Write-off of remaining cost — "+a.desc+" (sold "+a.disposal.date+", entry #"+a.disposal.entry+")";
+  if(!confirm("Post Dr "+s.disposalLoss+" / Cr "+s.ppeAccount+" for "+fmt(rem)+" on "+date+"?")) return;
+  const n=await postEntry({date,memo:d,lines:[{code:s.disposalLoss,account:ACC[s.disposalLoss].name,party:a.category,desc:d,dr:rem,cr:0,co:a.co},{code:s.ppeAccount,account:ACC[s.ppeAccount].name,party:a.category,desc:d,dr:0,cr:rem,co:a.co}]});
+  a.disposal.remaining=0; a.disposal.writeoffEntry=n;
+  try{ await saveClosing("Assets: write-off "+a.desc); }catch(e){}
+  toast("Written off — entry #"+n+".",7000);
+}
+function viewAssets(m){
+  m.appendChild(el("div","xlhead","FIXED ASSETS — register, useful lives, depreciation, sales and retirements"));
+  const zone=el("div"); m.appendChild(zone);
+  Promise.all([loadClosing(),ledgerAll()]).then(([c,entries])=>{ zone.innerHTML=""; renderAssets(zone,c,entries); })
+   .catch(e=>{ zone.innerHTML=""; zone.appendChild(el("p","meta","Couldn’t load: "+esc(e.message))); });
+}
+function renderAssets(zone,c,entries){
+  const added=refreshAssets(c,entries); c.assets.forEach(assetNorm);
+  const edit=canMake(); const st=viewAssets.st=viewAssets.st||{filter:"active"};
+  if(added) zone.appendChild(el("p","meta",added+" new asset line(s) picked up from the books (account 1500)."));
+  const live=c.assets.filter(a=>!a.linked&&a.cost>0&&!a.disposal);
+  const cost=r2(live.reduce((s,a)=>s+a.cost,0)), dep=r2(live.reduce((s,a)=>s+assetBooked(c,a),0));
+  const full=live.filter(a=>assetStatus(c,a).key==="full").length, notready=live.filter(a=>assetStatus(c,a).key==="notready").length;
+  const yr=today().slice(0,4); const disposed=c.assets.filter(a=>a.disposal&&a.disposal.date.slice(0,4)===yr);
+  const tiles=el("div","tiles");
+  const tile=(a,v,s)=>tiles.appendChild(el("div","tile",'<div class="lbl">'+a+'</div><div class="v mono">'+v+'</div>'+(s?'<div class="s">'+s+'</div>':"")));
+  tile("Cost of assets held",fmt(cost),live.length+" assets"); tile("Depreciation booked",fmt(dep),"via Closing runs"); tile("Net book value",fmt(cost-dep),"");
+  tile("Fully depreciated",String(full),notready?notready+" not yet in use":"still in use"); tile("Disposed in "+yr,String(disposed.length),disposed.length?"result "+fmt(disposed.reduce((s,a)=>s+(a.disposal.result||0),0)):"");
+  zone.appendChild(tiles);
+  const f=el("div","filters"); f.style.marginTop="14px"; f.appendChild(el("span","flbl","Show:"));
+  const sel=el("select"); sel.innerHTML='<option value="active">Held (in use, not ready, fully depreciated)</option><option value="inuse">In use</option><option value="notready">Not yet in use</option><option value="full">Fully depreciated</option><option value="disposed">Sold / retired</option><option value="all">Everything</option>';
+  sel.value=st.filter; sel.onchange=()=>{ st.filter=sel.value; render(); }; f.appendChild(sel);
+  f.appendChild(el("span","meta",edit?"Edit the description, category, ready-for-use date, life and salvage, then Save register. Sell or retire from the row.":"Read-only — Makers edit the register."));
+  zone.appendChild(f);
+  const cats=[...new Set(c.assets.map(a=>a.category).filter(Boolean))].sort();
+  const dl=el("datalist"); dl.id="catlist"; dl.innerHTML=cats.map(x=>'<option value="'+esc(x)+'">').join(""); zone.appendChild(dl);
+  const rows=c.assets.filter(a=>{ if(a.linked||a.cost<=0) return false; const k=assetStatus(c,a).key;
+    if(st.filter==="all") return true; if(st.filter==="disposed") return k==="sold"||k==="retired";
+    if(k==="sold"||k==="retired") return false; if(st.filter==="active") return true; return k===st.filter||(st.filter==="inuse"&&k==="nodep"); });
+  const t=el("table","admtbl assets"); t.innerHTML='<tr><th>Asset</th><th></th><th>Status</th><th>Category</th><th>Co.</th><th>Bought</th><th class="num">Cost</th><th>Ready for use</th><th>Life (m)</th><th class="num">Salvage</th><th class="num">Monthly</th><th class="num">Booked dep.</th><th class="num">NBV</th></tr>';
+  rows.forEach(a=>{ const tr=el("tr"); const s=assetStatus(c,a); const sc=assetSched(c,a,thisMonth()); const done=!!a.disposal;
+    const inp=(val,w,type)=>{ const i=el("input",type==="number"?"amt mono":""); if(type) i.type=type; if(type==="number"){ i.step=type==="number"?"0.01":""; i.min="0"; } i.value=val; i.style.width=w; i.disabled=!edit||done; return i; };
+    const de=inp(a.desc,"200px"); de.title=a.desc; de.oninput=()=>a.desc=de.value; const td1=el("td"); td1.appendChild(de); tr.appendChild(td1);
+    const act=el("td","nowrap"); const acts=el("div","actions"); acts.style.marginTop="0"; acts.style.gap="2px";
+    if(edit&&!done){ const bs=el("button","btn3","Sell…"); bs.onclick=async()=>{ try{ await disposeAsset(c,a,"sold"); }catch(e){ toast("Not posted: "+e.message,7000); } DATA.consolidated=null; render(); };
+      const br=el("button","btn3 danger","Retire"); br.onclick=async()=>{ try{ await disposeAsset(c,a,"retired"); }catch(e){ toast("Not posted: "+e.message,7000); } DATA.consolidated=null; render(); }; acts.append(bs,br); }
+    if(edit&&done&&a.disposal.remaining>0.004){ const bw=el("button","btn3","Write off remaining "+fmt(a.disposal.remaining)); bw.onclick=async()=>{ try{ await writeOffRemaining(c,a); }catch(e){ toast("Not posted: "+e.message,7000); } DATA.consolidated=null; render(); }; acts.appendChild(bw); }
+    act.appendChild(acts); tr.appendChild(act);
+    const stc=el("td"); stc.appendChild(el("span","pill "+(s.key==="inuse"?"vy":s.key==="sold"||s.key==="retired"?"we":""),esc(s.label))); if(done) stc.appendChild(el("div","meta nowrap","entry #"+a.disposal.entry+(a.disposal.proceeds?" · proceeds "+fmt(a.disposal.proceeds):"")+(a.disposal.result!=null?" · "+(a.disposal.result<0?"loss "+fmt(-a.disposal.result):a.disposal.result>0?"gain "+fmt(a.disposal.result):"no gain/loss"):""))); tr.appendChild(stc);
+    const ca=inp(a.category,"130px"); ca.setAttribute("list","catlist"); ca.oninput=()=>a.category=ca.value; const td2=el("td"); td2.appendChild(ca); tr.appendChild(td2);
+    tr.appendChild(el("td","",'<span class="pill '+(a.co==="Vyltic"?"vy":"we")+'">'+a.co[0]+'</span>')); tr.appendChild(el("td","mono nowrap",esc(a.date)+' <span class="meta">#'+a.n+'</span>'));
+    tr.appendChild(el("td","num mono",fmt(a.cost)));
+    const rd=inp(a.ready,"128px","date"); rd.onchange=()=>{ a.ready=rd.value||a.date; render(); }; const td6=el("td"); td6.appendChild(rd); tr.appendChild(td6);
+    const li=inp(a.life||0,"58px","number"); li.step="1"; li.onchange=()=>{ a.life=Math.max(0,Math.round(+li.value||0)); render(); }; const td7=el("td"); td7.appendChild(li); tr.appendChild(td7);
+    const sv=inp(a.salvage||0,"72px","number"); sv.onchange=()=>{ a.salvage=r2(sv.value); render(); }; const td8=el("td","num"); td8.appendChild(sv); tr.appendChild(td8);
+    tr.appendChild(el("td","num mono",sc.monthly?fmt(sc.monthly):"·")); tr.appendChild(el("td","num mono",fmt(assetBooked(c,a)))); tr.appendChild(el("td","num mono",done?"·":fmt(assetNBV(c,a))));
+    t.appendChild(tr); });
+  if(!rows.length){ const tr=el("tr"); tr.innerHTML='<td colspan="13" class="meta">Nothing in this view.</td>'; t.appendChild(tr); }
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  if(edit){ const acts=el("div","actions"); const save=el("button","btn","Save register");
+    save.onclick=async()=>{ save.disabled=true; save.textContent="Saving…"; try{ await saveClosing("Assets register"); toast("Saved."); }catch(e){ toast("Save failed: "+e.message,7000); } save.disabled=false; save.textContent="Save register"; };
+    acts.appendChild(save); zone.appendChild(acts); }
+  zone.appendChild(el("p","meta","Depreciation is straight-line on (cost − salvage) over the life, from the month the asset is ready for use, and stops the month before a sale or retirement. Life 0 = not depreciated. Selling or retiring posts the disposal entry at once (cash in, accumulated depreciation out, gain to "+esc((c.settings.disposalGain||ASSET_DEFAULTS.disposalGain))+" or loss to "+esc((c.settings.disposalLoss||ASSET_DEFAULTS.disposalLoss))+", cost off 1500). Monthly charges are booked from the Closing tab."));
+  // unlinked credits to 1500 (historical disposals booked by hand)
+  const credits=c.assets.filter(a=>a.cost<0&&!a.linked);
+  if(credits.length){
+    zone.appendChild(el("h2","sec","Disposal credits in the books not yet linked to an asset"));
+    zone.appendChild(el("p","meta","These are credits to 1500 booked directly (e.g. a sale). Link each one to the asset it belongs to; the asset is then marked sold on that date, and any cost still sitting on 1500 can be written off with one click."));
+    const t2=el("table","admtbl"); t2.innerHTML='<tr><th>Date</th><th>Description</th><th>Category</th><th class="num">Credit</th><th>Entry</th><th>Belongs to</th><th></th></tr>';
+    credits.forEach(cr=>{ const tr=el("tr"); tr.appendChild(el("td","mono",esc(cr.date))); tr.appendChild(el("td","",esc(cr.desc))); tr.appendChild(el("td","",esc(cr.category))); tr.appendChild(el("td","num mono",fmt(-cr.cost))); tr.appendChild(el("td","mono","#"+cr.n));
+      const sel=el("select"); const cands=c.assets.filter(a=>a.cost>0&&!a.linked&&!a.disposal&&a.co===cr.co&&a.date<=cr.date);
+      sel.innerHTML='<option value="">— choose asset —</option>'+cands.map(a=>'<option value="'+a.id+'">'+esc(a.desc)+' ('+esc(a.date)+', '+fmt(a.cost)+')</option>').join(""); sel.disabled=!edit; const td=el("td"); td.appendChild(sel); tr.appendChild(td);
+      const b=el("button","btn3","Link"); b.disabled=!edit; b.onclick=async()=>{ const a=c.assets.find(x=>x.id===sel.value); if(!a){ toast("Choose the asset first."); return; }
+        const proceeds=r2(-cr.cost); const remaining=r2(a.cost+cr.cost);
+        if(!confirm("Mark “"+a.desc+"” as sold on "+cr.date+" for "+fmt(proceeds)+" (entry #"+cr.n+")? "+(remaining>0.004?"Cost of "+fmt(remaining)+" is still on 1500 — you can write it off next.":""))) return;
+        a.disposal={date:cr.date,type:"sold",proceeds,entry:cr.n,bookedDep:0,result:r2(proceeds-a.cost),manual:true,remaining}; cr.linked=a.id;
+        try{ await saveClosing("Assets: link disposal #"+cr.n); toast("Linked."); }catch(e){ toast("Save failed: "+e.message,7000); } render(); };
+      const td2=el("td"); td2.appendChild(b); tr.appendChild(td2); t2.appendChild(tr); });
+    const w2=el("div","tablewrap"); w2.style.padding="8px 12px"; w2.appendChild(t2); zone.appendChild(w2);
+  }
 }
 
 /* ---------- admin (people & permissions; saved straight to the site via GitHub) ---------- */
@@ -1199,6 +1336,7 @@ function viewGuide(m){
   +'<h3>Roles</h3><p><strong>Viewer</strong> reads the reports and can draft an entry to send to Ahmed. <strong>Maker</strong> also posts entries straight into the books (Entry tab), adds names to the Lists and adds accounts to the CoA. <strong>Admin</strong> is a Maker who also manages people in the Admin tab.</p>'
   +'<h3>Posting an entry</h3><p>Entry tab → New entry → pick the company and date, add the lines, make sure it says <em>balanced</em>, then <strong>Post entry</strong>. It gets the next number and shows in the GL and every report at once (other people see it on their next refresh). Cross-company entries, month-end items and corrections still go through Ahmed — there is no delete; a mistake is fixed with a reversing entry.</p>'
   +'<h3>Month-end (Employees &amp; Closing tabs)</h3><p>Makers with both companies see two more tabs. <strong>Employees</strong> is the payroll register: company, cost center, monthly salary, current/stopped — change someone&rsquo;s company there and the next month books to the new company. <strong>Closing</strong> runs the month: salaries (expense to 5100, advances cleared from 1100, the rest owed on 2000; tick <em>Paid</em> per person when you pay and it posts Dr 2000 / Cr 1000), depreciation (straight-line from the asset register, with catch-up for months never booked) and the Welltold profit share (⅓ each of a positive net; loss month = nothing). Everything it books is a normal entry you can see in the GL.</p>'
+  +'<h3>Fixed assets</h3><p>The <strong>Assets</strong> tab lists every purchase booked to 1500 with its ready-for-use date, useful life, salvage, depreciation booked and net book value. <em>Sell…</em> or <em>Retire</em> posts the disposal entry immediately (proceeds to cash, accumulated depreciation and cost removed, gain to 4100 or loss to 5900). Old sales booked straight to 1500 can be linked to their asset and the leftover cost written off.</p>'
   +'<h3>Reading the numbers</h3><p>Cash is one pooled bank balance for the whole entity — a company&rsquo;s share can be negative (the other side funds it). Lines marked <code>IC Intercompany</code> only balance cross-company entries inside a single-company view. The Welltold profit share (⅓ Joud + ⅓ Rami of the monthly net) is booked centrally at month-end.</p>'
   +'<h3>Briefing for your AI</h3>';
   const cp=el("button","btn2","Copy AI briefing"); cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(RULES).then(()=>toast("Copied."));};
