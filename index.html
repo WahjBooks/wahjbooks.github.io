@@ -251,7 +251,7 @@ const entriesArr=()=>{ const d=DATA[scope]||{}; return Object.keys(d).sort().map
 
 /* ---------- crypto / auth (email + password; keys unwrapped client-side) ---------- */
 let ME=null, ADMIN=null, MYEMAIL="";
-const SUPER="a_altayeb@hotmail.com";
+const SUPER="ahmad@vyltic.com";
 async function deriveKek(pw,salt,usages){
   const km=await crypto.subtle.importKey("raw",new TextEncoder().encode(pw),"PBKDF2",false,["deriveBits"]);
   const bits=await crypto.subtle.deriveBits({name:"PBKDF2",salt,iterations:META.iter,hash:"SHA-256"},km,256);
