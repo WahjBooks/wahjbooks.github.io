@@ -899,10 +899,11 @@ async function payParty(entries,party,amount,label){
     {code:"1000",account:ACC["1000"].name,party:"",desc:label+" — paid to "+party,dr:0,cr:r2(amt),co}]});
   return n;
 }
-function paidCell(entries,party,accrued,label,after){
+function paidCell(entries,party,accrued,label,after,booked){
   const td=el("td"); const owed=apOwed(entries,party);
   const cb=el("input"); cb.type="checkbox"; const lab=el("label"); lab.appendChild(cb);
-  if(accrued<=0.004){ lab.append(" —"); cb.disabled=true; }
+  if(accrued<=0.004&&booked>0.004){ cb.checked=true; cb.disabled=true; lab.append(" paid (settled when booked)"); }
+  else if(accrued<=0.004){ lab.append(" —"); cb.disabled=true; }
   else if(owed<=0.004){ cb.checked=true; cb.disabled=true; lab.append(" paid"); }
   else { lab.append(" paid? (owed "+fmt(owed)+")"); cb.onchange=async()=>{ cb.disabled=true; try{ const n=await payParty(entries,party,Math.min(accrued,owed),label); if(n){ toast("Paid — entry #"+n+"."); after(); } else { cb.checked=false; cb.disabled=false; } }catch(e){ toast("Not posted: "+e.message,7000); cb.checked=false; cb.disabled=false; } }; }
   td.appendChild(lab); return td;
@@ -966,7 +967,7 @@ function secSalaries(zone,c,entries,mo){
       tr.appendChild(el("td","",esc([...new Set(linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p.name&&e.date.slice(0,7)===mo).map(({l})=>l.co))].join("/"))));
       tr.appendChild(el("td","",esc(p.center||"—"))); tr.appendChild(el("td","num mono",fmt(booked))); tr.appendChild(el("td","num mono","")); tr.appendChild(el("td","num mono",fmt(accruedIn(entries,p.name,mo))));
       tr.appendChild(el("td","",'<span class="pill vy">booked '+esc([...new Set(src)].join(", "))+'</span>'));
-      tr.appendChild(paidCell(entries,p.name,accruedIn(entries,p.name,mo),p.name+" — "+monthName(mo)+" salary",()=>{ DATA.consolidated=null; render(); }));
+      tr.appendChild(paidCell(entries,p.name,accruedIn(entries,p.name,mo),p.name+" — "+monthName(mo)+" salary",()=>{ DATA.consolidated=null; render(); },booked));
     } else {
       anyToRun=true; plan.push(row);
       const co=el("select"); co.innerHTML=myCompanies().map(s=>'<option'+(scopeLabel[s]===p.company?" selected":"")+'>'+scopeLabel[s]+'</option>').join(""); co.onchange=()=>row.company=co.value; const td2=el("td"); td2.appendChild(co); tr.appendChild(td2);
@@ -976,7 +977,7 @@ function secSalaries(zone,c,entries,mo){
       const ad=el("input","amt mono"); ad.type="number"; ad.step="0.01"; ad.value=row.advance; ad.style.width="100px"; ad.title="Open advances (1100) for this person: "+fmt(adv); const td5=el("td","num"); td5.appendChild(ad); if(adv>0.004) td5.appendChild(el("div","meta","open "+fmt(adv))); tr.appendChild(td5);
       const acc=el("td","num mono",fmt(row.salary-row.advance));
       const upd=()=>{ row.salary=r2(sa.value); row.advance=Math.min(r2(ad.value),row.salary); acc.textContent=fmt(row.salary-row.advance); }; sa.oninput=upd; ad.oninput=upd;
-      tr.appendChild(acc); tr.appendChild(el("td","meta","not yet")); tr.appendChild(el("td","meta","—"));
+      tr.appendChild(acc); tr.appendChild(el("td","meta","not yet")); tr.appendChild(el("td","meta","after run"));
     }
     t.appendChild(tr);
   });
@@ -1073,7 +1074,7 @@ function secShare(zone,c,entries,mo){
   const t2=el("table","admtbl"); t2.innerHTML='<tr><th>Partner</th><th class="num">Share</th><th>Booked</th><th>Paid</th></tr>';
   booked.forEach(({p,amt})=>{ const tr=el("tr"); tr.appendChild(el("td","",esc(p))); tr.appendChild(el("td","num mono",fmt(amt>0.004?amt:each)));
     tr.appendChild(el("td","",amt>0.004?'<span class="pill we">booked '+esc([...new Set(linesWhere(entries,(e,l)=>l.code===s.shareAccount&&l.party===p&&e.date.slice(0,7)===mo).map(({e})=>"#"+e.n))].join(", "))+'</span>':'<span class="meta">not yet</span>'));
-    if(amt>0.004) tr.appendChild(paidCell(entries,p,accruedIn(entries,p,mo),"Welltold profit share — "+p+" ("+monthName(mo)+")",()=>{ DATA.consolidated=null; render(); })); else tr.appendChild(el("td","meta","—"));
+    if(amt>0.004) tr.appendChild(paidCell(entries,p,accruedIn(entries,p,mo),"Welltold profit share — "+p+" ("+monthName(mo)+")",()=>{ DATA.consolidated=null; render(); },amt)); else tr.appendChild(el("td","meta","—"));
     t2.appendChild(tr); });
   const wrap2=el("div","tablewrap"); wrap2.style.padding="8px 12px"; wrap2.appendChild(t2); zone.appendChild(wrap2);
   const acts=el("div","actions");
