@@ -167,6 +167,11 @@ table.assets td{padding:5px 6px;font-size:12.5px}
 table.assets th{white-space:nowrap}
 table.assets input{padding:4px 6px;font-size:12.5px}
 table.assets .pill{white-space:nowrap}
+table.emps{min-width:1420px}
+table.emps td{padding:5px 6px;font-size:12.5px}
+table.emps th{white-space:nowrap}
+table.emps input,table.emps select{padding:4px 6px;font-size:12.5px}
+table.emps .btn3{padding:3px 6px;font-size:12px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -881,7 +886,7 @@ async function loadClosing(){
   const entries=await ledgerAll();
   try{ CLOSING=await openBlob("closing","consolidated"); }catch(e){ CLOSING=null; }
   if(!CLOSING||!CLOSING.employees){ CLOSING=seedClosing(entries); CLOSING.unsaved=true; }
-  CLOSING.runs=CLOSING.runs||{}; CLOSING.settings=Object.assign({shareRate:1/3,shareParties:["Joud","Rami"],shareAccount:"5040",depAccount:"5400",accDepAccount:"1600",salaryAccount:"5100",carryForward:false,disposalGain:"4100",disposalLoss:"5900",cashAccount:"1000",ppeAccount:"1500"},CLOSING.settings||{});
+  CLOSING.runs=CLOSING.runs||{}; CLOSING.employees.forEach(p=>empNorm(p,entries)); CLOSING.settings=Object.assign({shareRate:1/3,shareParties:["Joud","Rami"],shareAccount:"5040",depAccount:"5400",accDepAccount:"1600",salaryAccount:"5100",carryForward:false,disposalGain:"4100",disposalLoss:"5900",cashAccount:"1000",ppeAccount:"1500"},CLOSING.settings||{});
   return CLOSING;
 }
 async function saveClosing(msg){
@@ -917,36 +922,186 @@ function paidCell(entries,party,accrued,label,after,booked){
   td.appendChild(lab); return td;
 }
 
+/* ---- employees: start/end dates + effective-dated assignments (company / cost center / salary) ---- */
+const DAY_MS=86400000;
+const dUTC=s=>Date.UTC(+s.slice(0,4),+s.slice(5,7)-1,+s.slice(8,10));
+const dayBefore=s=>new Date(dUTC(s)-DAY_MS).toISOString().slice(0,10);
+const daysBetween=(a,b)=>Math.round((dUTC(b)-dUTC(a))/DAY_MS)+1;
+const dLabel=s=>{ const d=new Date(dUTC(s)); return d.getUTCDate()+" "+d.toLocaleString("en",{month:"short",timeZone:"UTC"}); };
+const isDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s||"");
+function empNorm(p,entries){
+  if(!Array.isArray(p.assignments)||!p.assignments.length) p.assignments=[{from:"",company:p.company||"Vyltic",center:p.center||"",salary:r2(p.salary||0)}];
+  p.assignments.forEach(a=>{ a.from=isDate(a.from)?a.from:""; a.company=a.company||"Vyltic"; a.center=a.center||""; a.salary=r2(a.salary||0); });
+  p.assignments.sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0); p.assignments[0].from="";
+  if(entries&&p.name){ const ds=linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p.name&&(+l.dr)>0).map(({e})=>e.date).sort();
+    if(p.start==null){ p.start=ds.length?ds[0].slice(0,7)+"-01":""; if(ds.length) p.startGuess=true; }
+    if(p.status==="stopped"&&!p.end&&ds.length) p.end=monthEnd(ds[ds.length-1].slice(0,7)); }
+  if(!isDate(p.start)) p.start=""; if(!isDate(p.end)) p.end=""; if(p.note==null) p.note="";
+  delete p.status;
+  const cur=empCurrent(p); p.company=cur.company; p.center=cur.center; p.salary=cur.salary;   // mirror of the latest assignment (older code paths)
+  return p;
+}
+function empCurrent(p,date){ const d=date||today(); let cur=p.assignments[0]; p.assignments.forEach(a=>{ if(!a.from||a.from<=d) cur=a; }); return cur; }
+function empActiveIn(p,mo){ const m1=mo+"-01", mE=monthEnd(mo); return (!p.start||p.start<=mE)&&(!p.end||p.end>=m1); }
+function empStatus(p){ const t=today();
+  if(p.end&&p.end<t) return {key:"ended",label:"Ended "+p.end};
+  if(p.start&&p.start>t) return {key:"starts",label:"Starts "+p.start};
+  return {key:"current",label:"Current"+(p.end?" · ends "+p.end:"")}; }
+function empSegments(p,mo){   // the month split by start/end and by assignment changes; amount = salary × days / days in month
+  const m1=mo+"-01", mE=monthEnd(mo), D=daysBetween(m1,mE);
+  const s=p.start&&p.start>m1?p.start:m1, e=p.end&&p.end<mE?p.end:mE; if(s>e) return [];
+  const as=p.assignments, segs=[];
+  as.forEach((a,i)=>{ const af=a.from||"0000-01-01", at=i+1<as.length?dayBefore(as[i+1].from):"9999-12-31";
+    const f=af>s?af:s, t=at<e?at:e; if(f>t) return; const days=daysBetween(f,t); segs.push({from:f,to:t,days,D,a,full:days===D,amount:r2((+a.salary||0)*days/D)}); });
+  return segs;
+}
+
 /* ---- Employees tab ---- */
 function viewEmployees(m){
   m.appendChild(el("div","xlhead","EMPLOYEES — who is on payroll, where, and for how much"));
-  m.appendChild(el("p","meta","Set each person’s company, cost center and monthly salary here. The Closing tab reads this when you run the month’s salaries — change the company here (or on the run itself) and the next month books to the new company. Stopped people are skipped."));
+  m.appendChild(el("p","meta","Each person has a start date, an end date and a company / cost center / salary that apply <b>from a given date</b>. To move someone or change their pay from a date, click <b>Change from…</b> — the earlier setting stays on record and the Closing tab splits any month that straddles the change by days (e.g. a move on 15 Aug books 14/31 to the old company and 17/31 to the new one). Editing the fields directly changes the current setting itself; the past is never rebooked — months already run stay as booked."));
   const zone=el("div"); m.appendChild(zone);
   loadClosing().then(()=>{
     zone.innerHTML="";
-    const t=el("table","admtbl"); t.innerHTML='<tr><th>Name</th><th>Company</th><th>Cost center</th><th class="num">Monthly salary</th><th>Status</th><th>Note</th><th></th></tr>';
+    const t=el("table","admtbl emps"); t.innerHTML='<tr><th>Name</th><th>Start</th><th>End</th><th>Company</th><th>Cost center</th><th class="num">Monthly salary</th><th>Effective from</th><th>Status</th><th>Note</th><th></th></tr>';
     const centers=LISTS["Cost/Profit Centers"]||[];
-    const row=p=>{ const tr=el("tr");
-      const nm=el("input"); nm.value=p.name; nm.placeholder="Name"; nm.setAttribute("list","emplist"); nm.onchange=()=>p.name=nm.value.trim();
-      const co=el("select"); co.innerHTML=myCompanies().map(s=>'<option'+(scopeLabel[s]===p.company?" selected":"")+'>'+scopeLabel[s]+'</option>').join(""); co.onchange=()=>p.company=co.value;
-      const ce=el("select"); ce.innerHTML='<option value="">—</option>'+centers.map(c=>'<option'+(c===p.center?" selected":"")+'>'+esc(c)+'</option>').join(""); ce.onchange=()=>p.center=ce.value;
-      const sa=el("input","amt mono"); sa.type="number"; sa.step="0.01"; sa.min="0"; sa.value=p.salary||0; sa.style.width="110px"; sa.oninput=()=>p.salary=r2(sa.value);
-      const st=el("select"); st.innerHTML='<option value="current"'+(p.status!=="stopped"?" selected":"")+'>Current</option><option value="stopped"'+(p.status==="stopped"?" selected":"")+'>Stopped</option>'; st.onchange=()=>p.status=st.value;
-      const no=el("input"); no.value=p.note||""; no.placeholder="note"; no.oninput=()=>p.note=no.value;
-      const rm=el("button","btn3 danger","Remove"); rm.onclick=()=>{ if(confirm("Remove "+p.name+" from the register? (Nothing in the books changes.)")){ CLOSING.employees=CLOSING.employees.filter(x=>x!==p); render(); } };
-      [nm,co,ce,sa,st,no,rm].forEach(n=>{ const td=el("td"); td.appendChild(n); tr.appendChild(td); }); return tr; };
+    const row=p=>{ const tr=el("tr"); const cur=p.assignments[p.assignments.length-1], prev=p.assignments.length>1?p.assignments[p.assignments.length-2]:null;
+      const nm=el("input"); nm.value=p.name; nm.placeholder="Name"; nm.setAttribute("list","emplist"); nm.style.width="150px"; nm.onchange=()=>p.name=nm.value.trim();
+      const sd=el("input"); sd.type="date"; sd.value=p.start||""; if(p.startGuess) sd.title="Pre-filled from the first salary in the books — correct it if you know the real date"; sd.onchange=()=>{ p.start=sd.value; delete p.startGuess; render(); };
+      const ed=el("input"); ed.type="date"; ed.value=p.end||""; ed.title="Last paid day. Leave blank while the person is on payroll."; ed.onchange=()=>{ p.end=ed.value; render(); };
+      const co=el("select"); co.innerHTML=myCompanies().map(s=>'<option'+(scopeLabel[s]===cur.company?" selected":"")+'>'+scopeLabel[s]+'</option>').join(""); co.onchange=()=>{ cur.company=co.value; p.company=cur.company; };
+      const ce=el("select"); ce.innerHTML='<option value="">—</option>'+centers.map(c=>'<option'+(c===cur.center?" selected":"")+'>'+esc(c)+'</option>').join(""); ce.onchange=()=>{ cur.center=ce.value; p.center=cur.center; };
+      const sa=el("input","amt mono"); sa.type="number"; sa.step="0.01"; sa.min="0"; sa.value=cur.salary||0; sa.style.width="100px"; sa.oninput=()=>{ cur.salary=r2(sa.value); p.salary=cur.salary; };
+      const ef=el("td","nowrap");
+      if(prev){ const fd=el("input"); fd.type="date"; fd.value=cur.from; fd.min=prev.from||p.start||""; fd.onchange=()=>{ if(!isDate(fd.value)||(prev.from&&fd.value<=prev.from)){ toast("The date must be after the previous change ("+(prev.from||"start")+")."); fd.value=cur.from; return; } cur.from=fd.value; render(); }; ef.appendChild(fd);
+        const hist=el("div","meta"); hist.style.marginTop="4px"; hist.innerHTML=p.assignments.slice(0,-1).map((a,i)=>"until "+esc(dayBefore(p.assignments[i+1].from))+": "+esc(a.company)+" · "+esc(a.center||"—")+" · "+fmt(a.salary)).join("<br>"); ef.appendChild(hist); }
+      else ef.appendChild(el("span","meta","since start"));
+      const st=empStatus(p); const stc=el("td","nowrap",'<span class="pill'+(st.key==="current"?" vy":"")+'">'+esc(st.label)+'</span>');
+      const no=el("input"); no.value=p.note||""; no.placeholder="note"; no.style.width="140px"; no.oninput=()=>p.note=no.value;
+      const acts=el("td","nowrap");
+      const ch=el("button","btn3","Change from…"); ch.title="Move to another company / cost center or change the salary from a date"; ch.onclick=()=>{ const d=prompt("Change "+(p.name||"this person")+"'s company / cost center / salary from which date? (YYYY-MM-DD)",today()); if(!d) return;
+        if(!isDate(d)){ toast("Date must be YYYY-MM-DD."); return; } if(cur.from&&d<=cur.from){ toast("Must be after the current setting's date ("+cur.from+")."); return; } if(p.start&&d<=p.start){ toast("Must be after the start date."); return; }
+        p.assignments.push({from:d,company:cur.company,center:cur.center,salary:cur.salary}); render(); toast("Now edit the company, cost center or salary on the row — it applies from "+d+". Then Save register.",6000); };
+      acts.appendChild(ch);
+      if(prev){ const un=el("button","btn3","Undo change"); un.style.marginLeft="4px"; un.onclick=()=>{ if(confirm("Drop the change from "+cur.from+" and go back to: "+prev.company+" · "+(prev.center||"—")+" · "+fmt(prev.salary)+"?")){ p.assignments.pop(); empNorm(p); render(); } }; acts.appendChild(un); }
+      const rm=el("button","btn3 danger","Remove"); rm.style.marginLeft="4px"; rm.onclick=()=>{ if(confirm("Remove "+p.name+" from the register? (Nothing in the books changes.)")){ CLOSING.employees=CLOSING.employees.filter(x=>x!==p); render(); } }; acts.appendChild(rm);
+      [nm,sd,ed,co,ce,sa].forEach(n=>{ const td=el("td",n===sa?"num":""); td.appendChild(n); tr.appendChild(td); });
+      tr.appendChild(ef); tr.appendChild(stc); const tdn=el("td"); tdn.appendChild(no); tr.appendChild(tdn); tr.appendChild(acts); return tr; };
     CLOSING.employees.forEach(p=>t.appendChild(row(p)));
     const dl=el("datalist"); dl.id="emplist"; dl.innerHTML=(LISTS["Employees"]||[]).map(p=>'<option value="'+esc(p)+'">').join(""); zone.appendChild(dl);
     const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
     const acts=el("div","actions");
-    const add=el("button","btn2","+ Add person"); add.onclick=()=>{ CLOSING.employees.push({id:"e"+Math.random().toString(36).slice(2,8),name:"",company:scopeLabel[myCompanies()[0]],center:"",salary:0,status:"current",note:""}); render(); };
-    const save=el("button","btn","Save register"); save.onclick=async()=>{ if(CLOSING.employees.some(p=>!p.name)){ toast("Every row needs a name."); return; } save.disabled=true; save.textContent="Saving…";
+    const add=el("button","btn2","+ Add person"); add.onclick=()=>{ CLOSING.employees.push(empNorm({id:"e"+Math.random().toString(36).slice(2,8),name:"",start:today(),end:"",note:"",assignments:[{from:"",company:scopeLabel[myCompanies()[0]],center:"",salary:0}]})); render(); };
+    const save=el("button","btn","Save register"); save.onclick=async()=>{ if(CLOSING.employees.some(p=>!p.name)){ toast("Every row needs a name."); return; }
+      const bad=CLOSING.employees.find(p=>p.start&&p.end&&p.end<p.start); if(bad){ toast(bad.name+": the end date is before the start date."); return; }
+      save.disabled=true; save.textContent="Saving…";
       try{ await saveClosing("Employees register"); toast("Saved."); }catch(e){ toast("Save failed: "+e.message,7000); } save.disabled=false; save.textContent="Save register"; render(); };
     acts.append(add,save); zone.appendChild(acts);
-    if(CLOSING.unsaved) zone.appendChild(el("p","meta","This register was pre-filled from the salary entries in the books (latest month = current). Check it and click Save register."));
-    const tot=CLOSING.employees.filter(p=>p.status!=="stopped").reduce((a,p)=>a+(+p.salary||0),0);
-    zone.appendChild(el("p","meta","Monthly payroll of current people: "+fmt(tot)+"."));
+    if(CLOSING.unsaved) zone.appendChild(el("p","meta","This register was pre-filled from the salary entries in the books (paid in one of the last two payroll months = current; start = first salary month; end = last salary month for the others). Check it and click Save register."));
+    const tot=CLOSING.employees.filter(p=>p.name&&empStatus(p).key==="current").reduce((a,p)=>a+(+empCurrent(p).salary||0),0);
+    zone.appendChild(el("p","meta","Monthly payroll of current people: "+fmt(tot)+". Dates are inclusive; a month that starts, ends or changes mid-way is paid pro rata by calendar days (you can still overtype any amount on the run)."));
   }).catch(e=>{ zone.innerHTML=""; zone.appendChild(el("p","meta","Couldn’t open the register: "+esc(e.message))); });
+}
+
+function secSalaries(zone,c,entries,mo){
+  const end=monthEnd(mo);
+  zone.appendChild(el("h2","sec","1 · Salaries — "+monthName(mo)));
+  const emps=c.employees.filter(p=>p.name&&empActiveIn(p,mo));
+  if(!emps.length){ zone.appendChild(el("p","meta","Nobody is on payroll in "+monthName(mo)+" (Employees tab: check the start and end dates).")); return; }
+  const t=el("table","admtbl"); t.innerHTML='<tr><th>Employee</th><th>Period</th><th>Company</th><th>Center</th><th class="num">Salary</th><th class="num">Advance to clear</th><th class="num">Accrue (unpaid)</th><th>Booked</th><th>Paid</th></tr>';
+  const plan=[]; let anyToRun=false; const skipped=[];
+  emps.forEach(p=>{
+    const mine=linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p.name&&e.date.slice(0,7)===mo); const booked=r2(sumDr(mine));
+    if(booked>0.004){
+      const tr=el("tr"); tr.appendChild(el("td","",esc(p.name))); tr.appendChild(el("td","meta","—"));
+      tr.appendChild(el("td","",esc([...new Set(mine.map(({l})=>l.co))].join("/"))));
+      tr.appendChild(el("td","",esc(empCurrent(p,end).center||"—"))); tr.appendChild(el("td","num mono",fmt(booked))); tr.appendChild(el("td","num mono","")); tr.appendChild(el("td","num mono",fmt(accruedIn(entries,p.name,mo))));
+      tr.appendChild(el("td","",'<span class="pill vy">booked '+esc([...new Set(mine.map(({e})=>"#"+e.n))].join(", "))+'</span>'));
+      tr.appendChild(paidCell(entries,p.name,accruedIn(entries,p.name,mo),p.name+" — "+monthName(mo)+" salary",()=>{ DATA.consolidated=null; render(); },booked));
+      t.appendChild(tr); return;
+    }
+    const segs=empSegments(p,mo).filter(g=>g.amount>0.004);
+    if(!segs.length){ skipped.push(p.name); return; }
+    anyToRun=true;
+    const adv=advanceOf(entries,p.name,end);
+    segs.forEach((g,i)=>{
+      const row={p,g,company:g.a.company,salary:g.amount,advance:i===0?Math.min(adv,g.amount):0}; plan.push(row);
+      const tr=el("tr"); tr.appendChild(el("td","",i===0?esc(p.name):""));
+      tr.appendChild(el("td","meta nowrap",g.full?"full month":esc(dLabel(g.from)+"–"+dLabel(g.to)+" · "+g.days+"/"+g.D+" days")));
+      const co=el("select"); co.innerHTML=myCompanies().map(s=>'<option'+(scopeLabel[s]===g.a.company?" selected":"")+'>'+scopeLabel[s]+'</option>').join(""); co.onchange=()=>row.company=co.value; const td2=el("td"); td2.appendChild(co); tr.appendChild(td2);
+      tr.appendChild(el("td","",esc(g.a.center||"—")));
+      const sa=el("input","amt mono"); sa.type="number"; sa.step="0.01"; sa.value=row.salary; sa.style.width="100px"; if(!g.full) sa.title=fmt(g.a.salary)+" × "+g.days+"/"+g.D+" days"; const td4=el("td","num"); td4.appendChild(sa); tr.appendChild(td4);
+      const td5=el("td","num");
+      const acc=el("td","num mono",fmt(row.salary-row.advance));
+      if(i===0){ const ad=el("input","amt mono"); ad.type="number"; ad.step="0.01"; ad.value=row.advance; ad.style.width="100px"; ad.title="Open advances (1100) for this person: "+fmt(adv); td5.appendChild(ad); if(adv>0.004) td5.appendChild(el("div","meta","open "+fmt(adv)));
+        const upd=()=>{ row.salary=r2(sa.value); row.advance=Math.min(r2(ad.value),row.salary); acc.textContent=fmt(row.salary-row.advance); }; sa.oninput=upd; ad.oninput=upd; }
+      else { td5.className="num mono"; td5.textContent=""; sa.oninput=()=>{ row.salary=r2(sa.value); acc.textContent=fmt(row.salary); }; }
+      tr.appendChild(td5); tr.appendChild(acc); tr.appendChild(el("td","meta","not yet")); tr.appendChild(el("td","meta","after run"));
+      t.appendChild(tr);
+    });
+  });
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  if(skipped.length) zone.appendChild(el("p","meta","No salary set (skipped): "+esc(skipped.join(", "))+"."));
+  const acts=el("div","actions");
+  if(anyToRun){
+    const b=el("button","btn","Run salaries for "+monthName(mo)); acts.appendChild(b);
+    b.onclick=async()=>{ const todo=plan.filter(r=>r.salary>0.004); if(!todo.length){ toast("Nothing to book."); return; }
+      const tot=todo.reduce((a,r)=>a+r.salary,0); const people=new Set(todo.map(r=>r.p.name)).size;
+      if(!confirm("Book "+people+" salaries for "+monthName(mo)+" (total "+fmt(tot)+", dated "+end+")? Expense goes to 5100, advances cleared from 1100, the rest accrues to 2000 [unpaid].")) return;
+      b.disabled=true; b.textContent="Posting…";
+      try{ const done=[]; const byCo={}; todo.forEach(r=>{ (byCo[r.company]=byCo[r.company]||[]).push(r); });
+        for(const [co,rows] of Object.entries(byCo)){ const lines=[];
+          rows.forEach(r=>{ const d=r.p.name+" — "+monthName(mo)+" salary"+(r.g.a.center?" ("+r.g.a.center+")":"")+(r.g.full?"":" · "+dLabel(r.g.from)+"–"+dLabel(r.g.to)+" ("+r.g.days+"/"+r.g.D+" days)");
+            lines.push({code:"5100",account:ACC["5100"].name,party:r.p.name,desc:d,dr:r.salary,cr:0,co});
+            if(r.advance>0.004) lines.push({code:"1100",account:ACC["1100"].name,party:r.p.name,desc:d+" — clears advance",dr:0,cr:r.advance,co});
+            const rest=r2(r.salary-r.advance); if(rest>0.004) lines.push({code:"2000",account:ACC["2000"].name,party:r.p.name,desc:d+" [unpaid]",dr:0,cr:rest,co}); });
+          const n=await postEntry({date:end,memo:"Salaries "+monthName(mo)+" ("+co+")",lines}); done.push(n); }
+        const rec=(c.runs[mo]=c.runs[mo]||{}); rec.salaries=rec.salaries||{emps:{},entries:[]}; rec.salaries.entries.push(...done);
+        todo.forEach(r=>{ const e=rec.salaries.emps[r.p.name]=rec.salaries.emps[r.p.name]||{company:"",salary:0,advance:0,segments:[]};
+          e.segments.push({from:r.g.from,to:r.g.to,days:r.g.days,company:r.company,center:r.g.a.center,amount:r.salary,advance:r.advance}); e.company=[...new Set(e.segments.map(s=>s.company))].join("/"); e.salary=r2(e.salary+r.salary); e.advance=r2(e.advance+r.advance); });
+        try{ await saveClosing("Closing: salaries "+mo); }catch(e){}
+        toast("Booked salaries — entries #"+done.join(", #")+".",7000); DATA.consolidated=null; render(); }
+      catch(e){ toast("Not posted: "+e.message,8000); b.disabled=false; b.textContent="Run salaries for "+monthName(mo); } };
+  } else acts.appendChild(el("span","meta","Everyone on payroll is booked for this month. Tick Paid as you pay them (each tick posts Dr 2000 / Cr 1000 Cash)."));
+  zone.appendChild(acts);
+}
+
+function secShare(zone,c,entries,mo){
+  const s=c.settings; const end=monthEnd(mo); const parties=s.shareParties;
+  zone.appendChild(el("h2","sec","3 · Welltold profit share — "+monthName(mo)));
+  const b=shareBasis(entries,mo); const base=b.net; const each=r2(base*s.shareRate);
+  const booked=parties.map(p=>({p,amt:r2(sumDr(linesWhere(entries,(e,l)=>l.code===s.shareAccount&&l.party===p&&e.date.slice(0,7)===mo)))}));
+  const isBooked=booked.some(x=>Math.abs(x.amt)>0.004);
+  const t=el("table","admtbl"); t.innerHTML='<tr><th>Welltold revenue</th><th>Delivery costs (5150/5900)</th><th>Salaries (5100)</th><th>Net</th><th>⅓ each</th></tr>'+
+    '<tr class="mono"><td class="num">'+fmt(b.rev)+'</td><td class="num">'+fmt(b.del)+'</td><td class="num">'+fmt(b.sal)+'</td><td class="num">'+fmt(b.net)+'</td><td class="num">'+fmt(each)+'</td></tr>';
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  const t2=el("table","admtbl"); t2.innerHTML='<tr><th>Partner</th><th class="num">Share</th><th>Booked</th><th>Paid</th><th class="num">Owed to partner now</th></tr>';
+  booked.forEach(({p,amt})=>{ const tr=el("tr"); tr.appendChild(el("td","",esc(p))); const shown=Math.abs(amt)>0.004?amt:each; tr.appendChild(el("td","num mono",fmt(shown)));
+    tr.appendChild(el("td","",Math.abs(amt)>0.004?'<span class="pill we">booked '+esc([...new Set(linesWhere(entries,(e,l)=>l.code===s.shareAccount&&l.party===p&&e.date.slice(0,7)===mo).map(({e})=>"#"+e.n))].join(", "))+'</span>':'<span class="meta">not yet</span>'));
+    if(amt>0.004) tr.appendChild(paidCell(entries,p,accruedIn(entries,p,mo),"Welltold profit share — "+p+" ("+monthName(mo)+")",()=>{ DATA.consolidated=null; render(); },amt));
+    else if(amt<-0.004) tr.appendChild(el("td","meta","netted against what is owed"));
+    else tr.appendChild(el("td","meta",each<-0.004?"will net against what is owed":"—"));
+    tr.appendChild(el("td","num mono",fmt(apOwed(entries,p))));
+    t2.appendChild(tr); });
+  const wrap2=el("div","tablewrap"); wrap2.style.padding="8px 12px"; wrap2.appendChild(t2); zone.appendChild(wrap2);
+  const acts=el("div","actions");
+  if(isBooked) acts.appendChild(el("span","meta","Booked for this month."));
+  else if(Math.abs(each)>0.004){ const loss=each<0; const bt=el("button","btn",(loss?"Run loss share for ":"Run profit share for ")+monthName(mo));
+    bt.onclick=async()=>{ const q=loss?"Book "+parties.join(" + ")+"'s share of the "+monthName(mo)+" loss, "+fmt(each)+" each (Dr 2000 / Cr "+s.shareAccount+", Welltold, dated "+end+")? It reduces what Welltold owes each partner; if a partner is owed less than that, their 2000 balance turns into an amount they owe Welltold."
+        :"Book "+parties.join(" + ")+" profit share of "+fmt(each)+" each for "+monthName(mo)+" (Dr "+s.shareAccount+" / Cr 2000 [unpaid], Welltold, dated "+end+")?";
+      if(!confirm(q)) return;
+      bt.disabled=true; bt.textContent="Posting…";
+      try{ const lines=[]; const amt=Math.abs(each); parties.forEach(p=>{ const d="Welltold "+(loss?"loss":"profit")+" share — "+p+" (1/3 of "+monthName(mo)+" NET "+fmt(base)+")";
+          if(loss){ lines.push({code:"2000",account:ACC["2000"].name,party:p,desc:d+" — netted against payable",dr:amt,cr:0,co:"Welltold"}); lines.push({code:s.shareAccount,account:ACC[s.shareAccount].name,party:p,desc:d,dr:0,cr:amt,co:"Welltold"}); }
+          else { lines.push({code:s.shareAccount,account:ACC[s.shareAccount].name,party:p,desc:d,dr:amt,cr:0,co:"Welltold"}); lines.push({code:"2000",account:ACC["2000"].name,party:p,desc:d+" [unpaid]",dr:0,cr:amt,co:"Welltold"}); } });
+        const n=await postEntry({date:end,memo:"Welltold "+(loss?"loss":"profit")+" share "+monthName(mo),lines});
+        const rec=(c.runs[mo]=c.runs[mo]||{}); rec.share={entry:n,net:b.net,base,each}; try{ await saveClosing("Closing: profit share "+mo); }catch(e){}
+        toast("Booked "+(loss?"loss":"profit")+" share — entry #"+n+".",7000); DATA.consolidated=null; render(); }
+      catch(e){ toast("Not posted: "+e.message,8000); bt.disabled=false; bt.textContent=(loss?"Run loss share for ":"Run profit share for ")+monthName(mo); } };
+    acts.appendChild(bt); }
+  else acts.appendChild(el("span","meta","Nothing to share this month (net is zero)."));
+  zone.appendChild(acts);
+  zone.appendChild(el("p","meta","Net = Welltold revenue − delivery costs (5150/5900) − Welltold salaries (5100). Each partner gets ⅓ of the net every month: a profit is booked Dr "+s.shareAccount+" / Cr 2000 [unpaid] and owed until you tick Paid; a loss is booked the other way (Dr 2000 / Cr "+s.shareAccount+"), netting it against what is owed to the partner."));
 }
 
 /* ---- Closing tab ---- */
@@ -958,59 +1113,6 @@ function viewClosing(m){
   const zone=el("div"); m.appendChild(zone);
   Promise.all([loadClosing(),ledgerAll()]).then(([c,entries])=>{ zone.innerHTML=""; secSalaries(zone,c,entries,st.month); secDepreciation(zone,c,entries,st.month); secShare(zone,c,entries,st.month); })
    .catch(e=>{ zone.innerHTML=""; zone.appendChild(el("p","meta","Couldn’t load: "+esc(e.message))); });
-}
-function secSalaries(zone,c,entries,mo){
-  const end=monthEnd(mo); const run=(c.runs[mo]||{}).salaries||{emps:{},entries:[]};
-  zone.appendChild(el("h2","sec","1 · Salaries — "+monthName(mo)));
-  const emps=c.employees.filter(p=>p.status!=="stopped"&&p.name);
-  if(!emps.length){ zone.appendChild(el("p","meta","No current employees in the register (Employees tab).")); return; }
-  const t=el("table","admtbl"); t.innerHTML='<tr><th>Employee</th><th>Company</th><th>Center</th><th class="num">Salary</th><th class="num">Advance to clear</th><th class="num">Accrue (unpaid)</th><th>Booked</th><th>Paid</th></tr>';
-  const plan=[]; let anyToRun=false;
-  emps.forEach(p=>{
-    const booked=r2(sumDr(linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p.name&&e.date.slice(0,7)===mo)));
-    const tr=el("tr"); tr.appendChild(el("td","",esc(p.name)));
-    const row={p,company:p.company,salary:r2(p.salary),advance:0};
-    if(booked>0.004){
-      const src=linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p.name&&e.date.slice(0,7)===mo).map(({e})=>"#"+e.n);
-      tr.appendChild(el("td","",esc([...new Set(linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p.name&&e.date.slice(0,7)===mo).map(({l})=>l.co))].join("/"))));
-      tr.appendChild(el("td","",esc(p.center||"—"))); tr.appendChild(el("td","num mono",fmt(booked))); tr.appendChild(el("td","num mono","")); tr.appendChild(el("td","num mono",fmt(accruedIn(entries,p.name,mo))));
-      tr.appendChild(el("td","",'<span class="pill vy">booked '+esc([...new Set(src)].join(", "))+'</span>'));
-      tr.appendChild(paidCell(entries,p.name,accruedIn(entries,p.name,mo),p.name+" — "+monthName(mo)+" salary",()=>{ DATA.consolidated=null; render(); },booked));
-    } else {
-      anyToRun=true; plan.push(row);
-      const co=el("select"); co.innerHTML=myCompanies().map(s=>'<option'+(scopeLabel[s]===p.company?" selected":"")+'>'+scopeLabel[s]+'</option>').join(""); co.onchange=()=>row.company=co.value; const td2=el("td"); td2.appendChild(co); tr.appendChild(td2);
-      tr.appendChild(el("td","",esc(p.center||"—")));
-      const sa=el("input","amt mono"); sa.type="number"; sa.step="0.01"; sa.value=row.salary; sa.style.width="100px"; const td4=el("td","num"); td4.appendChild(sa); tr.appendChild(td4);
-      const adv=advanceOf(entries,p.name,end); row.advance=Math.min(adv,row.salary);
-      const ad=el("input","amt mono"); ad.type="number"; ad.step="0.01"; ad.value=row.advance; ad.style.width="100px"; ad.title="Open advances (1100) for this person: "+fmt(adv); const td5=el("td","num"); td5.appendChild(ad); if(adv>0.004) td5.appendChild(el("div","meta","open "+fmt(adv))); tr.appendChild(td5);
-      const acc=el("td","num mono",fmt(row.salary-row.advance));
-      const upd=()=>{ row.salary=r2(sa.value); row.advance=Math.min(r2(ad.value),row.salary); acc.textContent=fmt(row.salary-row.advance); }; sa.oninput=upd; ad.oninput=upd;
-      tr.appendChild(acc); tr.appendChild(el("td","meta","not yet")); tr.appendChild(el("td","meta","after run"));
-    }
-    t.appendChild(tr);
-  });
-  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
-  const acts=el("div","actions");
-  if(anyToRun){
-    const b=el("button","btn","Run salaries for "+monthName(mo)); acts.appendChild(b);
-    b.onclick=async()=>{ const todo=plan.filter(r=>r.salary>0.004); if(!todo.length){ toast("Nothing to book."); return; }
-      const tot=todo.reduce((a,r)=>a+r.salary,0);
-      if(!confirm("Book "+todo.length+" salaries for "+monthName(mo)+" (total "+fmt(tot)+", dated "+end+")? Expense goes to 5100, advances cleared from 1100, the rest accrues to 2000 [unpaid].")) return;
-      b.disabled=true; b.textContent="Posting…";
-      try{ const done=[]; const byCo={}; todo.forEach(r=>{ (byCo[r.company]=byCo[r.company]||[]).push(r); });
-        for(const [co,rows] of Object.entries(byCo)){ const lines=[];
-          rows.forEach(r=>{ const d=r.p.name+" — "+monthName(mo)+" salary"+(r.p.center?" ("+r.p.center+")":"");
-            lines.push({code:"5100",account:ACC["5100"].name,party:r.p.name,desc:d,dr:r.salary,cr:0,co});
-            if(r.advance>0.004) lines.push({code:"1100",account:ACC["1100"].name,party:r.p.name,desc:d+" — clears advance",dr:0,cr:r.advance,co});
-            const rest=r2(r.salary-r.advance); if(rest>0.004) lines.push({code:"2000",account:ACC["2000"].name,party:r.p.name,desc:d+" [unpaid]",dr:0,cr:rest,co}); });
-          const n=await postEntry({date:end,memo:"Salaries "+monthName(mo)+" ("+co+")",lines}); done.push(n); }
-        const rec=(c.runs[mo]=c.runs[mo]||{}); rec.salaries=rec.salaries||{emps:{},entries:[]}; rec.salaries.entries.push(...done);
-        todo.forEach(r=>{ rec.salaries.emps[r.p.name]={company:r.company,salary:r.salary,advance:r.advance}; });
-        try{ await saveClosing("Closing: salaries "+mo); }catch(e){}
-        toast("Booked salaries — entries #"+done.join(", #")+".",7000); DATA.consolidated=null; render(); }
-      catch(e){ toast("Not posted: "+e.message,8000); b.disabled=false; b.textContent="Run salaries for "+monthName(mo); } };
-  } else acts.appendChild(el("span","meta","All current employees are booked for this month. Tick Paid as you pay them (each tick posts Dr 2000 / Cr 1000 Cash)."));
-  zone.appendChild(acts);
 }
 function depPlan(c,mo){
   return c.assets.filter(a=>!a.linked&&a.cost>0).map(a=>Object.assign({a},assetSched(c,a,mo)));
@@ -1057,42 +1159,6 @@ function secDepreciation(zone,c,entries,mo){
 function shareBasis(entries,mo){
   let rev=0,del=0,sal=0; linesWhere(entries,(e,l)=>l.co==="Welltold"&&e.date.slice(0,7)===mo).forEach(({l})=>{ if(l.code[0]==="4") rev+=(+l.cr)-(+l.dr); else if(l.code==="5150"||l.code==="5900") del+=(+l.dr)-(+l.cr); else if(l.code==="5100") sal+=(+l.dr)-(+l.cr); });
   return {rev:r2(rev),del:r2(del),sal:r2(sal),net:r2(rev-del-sal)};
-}
-function secShare(zone,c,entries,mo){
-  const s=c.settings; const end=monthEnd(mo); const parties=s.shareParties;
-  zone.appendChild(el("h2","sec","3 · Welltold profit share — "+monthName(mo)));
-  const b=shareBasis(entries,mo);
-  let carried=0; if(s.carryForward){ const months=[...new Set(entries.filter(e=>e.lines.some(l=>l.co==="Welltold")).map(e=>e.date.slice(0,7)))].filter(k=>k<mo).sort();
-    let lastBooked=""; months.forEach(k=>{ if(linesWhere(entries,(e,l)=>l.code===s.shareAccount&&parties.includes(l.party)&&e.date.slice(0,7)===k).length) lastBooked=k; });
-    months.filter(k=>k>lastBooked).forEach(k=>{ const n=shareBasis(entries,k).net; if(n<0) carried+=n; }); carried=r2(carried); }
-  const base=r2(b.net+carried); const each=base>0?r2(base*s.shareRate):0;
-  const booked=parties.map(p=>({p,amt:r2(sumDr(linesWhere(entries,(e,l)=>l.code===s.shareAccount&&l.party===p&&e.date.slice(0,7)===mo)))}));
-  const isBooked=booked.some(x=>x.amt>0.004);
-  const t=el("table","admtbl"); t.innerHTML='<tr><th>Welltold revenue</th><th>Delivery costs (5150/5900)</th><th>Salaries (5100)</th><th>Net</th>'+(s.carryForward?'<th>Losses carried</th><th>Share base</th>':'')+'<th>⅓ each</th></tr>'+
-    '<tr class="mono"><td class="num">'+fmt(b.rev)+'</td><td class="num">'+fmt(b.del)+'</td><td class="num">'+fmt(b.sal)+'</td><td class="num">'+fmt(b.net)+'</td>'+(s.carryForward?'<td class="num">'+fmt(carried)+'</td><td class="num">'+fmt(base)+'</td>':'')+'<td class="num">'+fmt(each)+'</td></tr>';
-  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
-  const t2=el("table","admtbl"); t2.innerHTML='<tr><th>Partner</th><th class="num">Share</th><th>Booked</th><th>Paid</th></tr>';
-  booked.forEach(({p,amt})=>{ const tr=el("tr"); tr.appendChild(el("td","",esc(p))); tr.appendChild(el("td","num mono",fmt(amt>0.004?amt:each)));
-    tr.appendChild(el("td","",amt>0.004?'<span class="pill we">booked '+esc([...new Set(linesWhere(entries,(e,l)=>l.code===s.shareAccount&&l.party===p&&e.date.slice(0,7)===mo).map(({e})=>"#"+e.n))].join(", "))+'</span>':'<span class="meta">not yet</span>'));
-    if(amt>0.004) tr.appendChild(paidCell(entries,p,accruedIn(entries,p,mo),"Welltold profit share — "+p+" ("+monthName(mo)+")",()=>{ DATA.consolidated=null; render(); },amt)); else tr.appendChild(el("td","meta","—"));
-    t2.appendChild(tr); });
-  const wrap2=el("div","tablewrap"); wrap2.style.padding="8px 12px"; wrap2.appendChild(t2); zone.appendChild(wrap2);
-  const acts=el("div","actions");
-  const cf=el("label"); const cfc=el("input"); cfc.type="checkbox"; cfc.checked=!!s.carryForward; cfc.onchange=async()=>{ s.carryForward=cfc.checked; try{ await saveClosing("Closing: share setting"); }catch(e){} render(); }; cf.appendChild(cfc); cf.append(" carry losses forward (a loss month reduces the next positive month’s base)"); acts.appendChild(cf);
-  if(isBooked) acts.appendChild(el("span","meta","Booked for this month."));
-  else if(base>0.004){ const bt=el("button","btn","Run profit share for "+monthName(mo));
-    bt.onclick=async()=>{ if(!confirm("Book "+parties.join(" + ")+" profit share of "+fmt(each)+" each for "+monthName(mo)+" (Dr "+s.shareAccount+" / Cr 2000 [unpaid], Welltold, dated "+end+")?")) return;
-      bt.disabled=true; bt.textContent="Posting…";
-      try{ const lines=[]; parties.forEach(p=>{ const d="Welltold profit share — "+p+" (1/3 of "+monthName(mo)+" NET "+fmt(base)+")";
-          lines.push({code:s.shareAccount,account:ACC[s.shareAccount].name,party:p,desc:d,dr:each,cr:0,co:"Welltold"}); lines.push({code:"2000",account:ACC["2000"].name,party:p,desc:d+" [unpaid]",dr:0,cr:each,co:"Welltold"}); });
-        const n=await postEntry({date:end,memo:"Welltold profit share "+monthName(mo),lines});
-        const rec=(c.runs[mo]=c.runs[mo]||{}); rec.share={entry:n,net:b.net,base,each}; try{ await saveClosing("Closing: profit share "+mo); }catch(e){}
-        toast("Booked profit share — entry #"+n+".",7000); DATA.consolidated=null; render(); }
-      catch(e){ toast("Not posted: "+e.message,8000); bt.disabled=false; bt.textContent="Run profit share for "+monthName(mo); } };
-    acts.appendChild(bt); }
-  else acts.appendChild(el("span","meta",b.net<0?"Loss month ("+fmt(b.net)+") — no share accrues.":"Nothing to share this month."));
-  zone.appendChild(acts);
-  zone.appendChild(el("p","meta","Net = Welltold revenue − delivery costs (5150/5900) − Welltold salaries (5100). Each partner gets ⅓ of a positive net, booked to "+s.shareAccount+" "+esc(ACC[s.shareAccount]?ACC[s.shareAccount].name:"")+" and owed on 2000 until you tick Paid."));
 }
 
 /* ---------- fixed assets: register, lives, ready-for-use, disposals ---------- */
