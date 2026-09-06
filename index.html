@@ -256,9 +256,11 @@ async function fetchBlob(name){
   if(PAT){ try{ const r=await fetch(GH_API+"/contents/data/"+name+"?t="+Date.now(),{headers:{Authorization:"Bearer "+PAT,Accept:"application/vnd.github.raw+json"}}); if(r.ok) return new Uint8Array(await r.arrayBuffer()); }catch(e){} }
   const r=await fetch("data/"+name+"?t="+Date.now(),{cache:"no-store"}); if(!r.ok) throw new Error("Couldn’t load "+name); return new Uint8Array(await r.arrayBuffer());
 }
-async function openBytes(buf,keyName){ const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:buf.slice(0,12)},KEYS[keyName],buf.slice(12)); return JSON.parse(td(pt)); }
+const MAGIC=[0,87,66,52]; // "\0WB4": a leading NUL keeps GitHub from transcoding the file as text
+const hasMagic=b=>b.length>16&&MAGIC.every((v,i)=>b[i]===v);
+async function openBytes(buf,keyName){ if(hasMagic(buf)) buf=buf.slice(4); const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:buf.slice(0,12)},KEYS[keyName],buf.slice(12)); return JSON.parse(td(pt)); }
 async function openBlob(name,keyName){ return openBytes(await fetchBlob(name+".enc"),keyName); }
-async function sealBlob(obj,keyName){ const iv=crypto.getRandomValues(new Uint8Array(12)); const ct=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},KEYS[keyName],te(JSON.stringify(obj)))); const out=new Uint8Array(12+ct.length); out.set(iv); out.set(ct,12); return out; }
+async function sealBlob(obj,keyName){ const iv=crypto.getRandomValues(new Uint8Array(12)); const ct=new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM",iv},KEYS[keyName],te(JSON.stringify(obj)))); const out=new Uint8Array(16+ct.length); out.set(MAGIC); out.set(iv,4); out.set(ct,16); return out; }
 function stripIC(e){ return Object.assign({},e,{lines:e.lines.filter(l=>l.code!=="IC")}); }
 function mergeCons(V,W){
   const out={}; [...new Set([...Object.keys(V),...Object.keys(W)])].sort().forEach(id=>{
