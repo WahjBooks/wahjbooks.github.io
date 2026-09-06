@@ -158,6 +158,8 @@ table.gl thead th{z-index:3}
 .listcols .card form.addrow{display:flex;gap:6px;margin-top:8px}
 .listcols .card form.addrow input{flex:1;min-width:0;padding:5px 8px;font-size:13px}
 #coaadd{align-items:center}
+.admtbl .num{text-align:right}
+.admtbl th.num{text-align:right}
 </style>
 </head>
 <body>
@@ -213,6 +215,7 @@ const te=s=>new TextEncoder().encode(s), td=b=>new TextDecoder().decode(b);
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function sha256hex(s){const h=await crypto.subtle.digest("SHA-256",te(s));return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,"0")).join("");}
 const today=()=>new Date().toISOString().slice(0,10);
+const lastDate=()=>{ let d=today(); Object.values(DATA).forEach(x=>Object.values(x||{}).forEach(e=>{ if(e.date>d) d=e.date; })); return d; };
 const r2=x=>Math.round((+x||0)*100+Number.EPSILON)/100;
 const xlSerial=d=>Math.round((Date.UTC(+d.slice(0,4),+d.slice(5,7)-1,+d.slice(8,10))-Date.UTC(1899,11,30))/86400000);
 
@@ -339,8 +342,9 @@ function renderScopes(){
     n.appendChild(b); });
 }
 function tabsList(){
-  const t=["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance","Lists","CoA","Entry","Guide"];
-  if(isAdmin()) t.push("Admin");
+  const t=["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance","Lists","CoA","Entry"];
+  if(closingOK()) t.push("Employees","Closing");
+  t.push("Guide"); if(isAdmin()) t.push("Admin");
   return t;
 }
 function renderTabs(){
@@ -353,7 +357,7 @@ function renderTabs(){
 function render(){
   const m=document.getElementById("main"); m.innerHTML="";
   if(!tabsList().includes(tab)) tab="Dashboard";
-  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
+  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Employees":viewEmployees,"Closing":viewClosing,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
 }
 
 /* ---------- report engine ---------- */
@@ -435,7 +439,7 @@ function plGrid(level,cols){
 }
 const PLVIEWS=[["total","Total — one column"],["monthly","By month"],["cumulative","By month, cumulative (YTD)"]];
 function viewPL(m){
-  const st=viewPL.st=viewPL.st||{level:3,view:"total",from:"2024-01-01",to:today()};
+  const st=viewPL.st=viewPL.st||{level:3,view:"total",from:"2024-01-01",to:lastDate()};
   const cols=periodCols(st);
   m.appendChild(el("div","xlhead","PROFIT & LOSS — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]+(st.view==="cumulative"?"   ·   cumulative from "+st.from:st.view==="monthly"?"   ·   month by month":"")));
   optRow(m,st,ch=>{Object.assign(st,ch);render();},PLVIEWS);
@@ -477,7 +481,7 @@ function bsGrid(level,cols){
 }
 const BSVIEWS=[["asat","As at date — one column"],["monthend","Month-end balances, by month"]];
 function viewBS(m){
-  const st=viewBS.st=viewBS.st||{level:3,view:"asat",asOf:today()};
+  const st=viewBS.st=viewBS.st||{level:3,view:"asat",asOf:lastDate()};
   const cols=st.view==="asat"?[{label:"As at "+st.asOf,asOf:st.asOf}]:months().filter(k=>k<=st.asOf.slice(0,7)).map(k=>({label:mlabel(k),asOf:monthEnd(k)<st.asOf?monthEnd(k):st.asOf}));
   m.appendChild(el("div","xlhead","BALANCE SHEET — AS AT "+st.asOf+"   Level "+st.level+"   ·   "+scopeLabel[scope]+(st.view==="monthend"?"   ·   month-end balances":"")));
   optRow(m,st,ch=>{Object.assign(st,ch);render();},BSVIEWS);
@@ -501,14 +505,14 @@ function cfGrid(level,cols){
   return rows;
 }
 function viewCF(m){
-  const st=viewCF.st=viewCF.st||{level:1,view:"total",from:"2024-01-01",to:today()};
+  const st=viewCF.st=viewCF.st||{level:1,view:"total",from:"2024-01-01",to:lastDate()};
   const cols=periodCols(st);
   m.appendChild(el("div","xlhead","CASH FLOW — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]+"   (classes from the CoA ‘Cash flow’ column)"));
   optRow(m,st,ch=>{Object.assign(st,ch);render();},PLVIEWS);
   m.appendChild(xlGrid(cfGrid(st.level,cols),cols));
 }
 function viewTB(m){
-  const st=viewTB.st=viewTB.st||{from:"2024-01-01",to:today()};
+  const st=viewTB.st=viewTB.st||{from:"2024-01-01",to:lastDate()};
   m.appendChild(el("div","xlhead","TRIAL BALANCE — "+st.from+" to "+st.to+"   ·   "+scopeLabel[scope]));
   optRow(m,st,ch=>{Object.assign(st,ch);render();});
   const acc={};
@@ -832,6 +836,264 @@ function viewEntry(m){
   if(draft) renderDraft();
 }
 
+/* ---------- month-end closing: employees register, depreciation, salaries, Welltold profit share ---------- */
+let CLOSING=null;
+const DEFAULT_LIVES={"IT & Computer Equipment":36,"Furniture & Fixtures":60,"Leasehold Improvements":60,"Appliances (A/C)":60,"Sports & Recreation":60,"Wael Abu Muhannad":60};
+const closingOK=()=>!!KEYS.consolidated&&canMake();
+const monthIdx=k=>(+k.slice(0,4))*12+(+k.slice(5,7))-1;
+const idxMonth=i=>String(Math.floor(i/12))+"-"+String(i%12+1).padStart(2,"0");
+const monthName=k=>new Date(k+"-15T00:00:00Z").toLocaleString("en",{month:"long",year:"numeric",timeZone:"UTC"});
+const thisMonth=()=>today().slice(0,7);
+async function ledgerAll(){ await loadScope("vyltic"); await loadScope("welltold"); if(!DATA.consolidated) DATA.consolidated=mergeCons(DATA.vyltic||{},DATA.welltold||{}); return Object.values(DATA.consolidated); }
+function linesWhere(entries,f){ const out=[]; entries.forEach(e=>e.lines.forEach(l=>{ if(f(e,l)) out.push({e,l}); })); return out; }
+const sumDr=xs=>r2(xs.reduce((a,{l})=>a+(+l.dr)-(+l.cr),0));
+function seedClosing(entries){
+  const c={v:1,employees:[],assets:[],settings:{shareRate:1/3,shareParties:["Joud","Rami"],shareAccount:"5040",depAccount:"5400",accDepAccount:"1600",salaryAccount:"5100",carryForward:false},runs:{}};
+  refreshAssets(c,entries);
+  // employees: everyone with a salary line this year; last amount & company; current if paid in the latest payroll month
+  const last={}, months=new Set();
+  linesWhere(entries,(e,l)=>l.code==="5100"&&e.date>=(new Date().getFullYear())+"-01-01"&&(+l.dr)>0).forEach(({e,l})=>{ const p=(l.party||"").trim(); if(!p) return; months.add(e.date.slice(0,7));
+    const cur=last[p]; if(!cur||e.date>cur.date) last[p]={date:e.date,co:l.co,amount:0}; });
+  const ms=[...months].sort(); const latest=ms.slice(-2);
+  Object.keys(last).forEach(p=>{ const m=last[p].date.slice(0,7); last[p].amount=r2(sumDr(linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p&&e.date.slice(0,7)===m&&l.co===last[p].co))); });
+  (LISTS["Employees"]||[]).forEach(p=>{ if(!last[p]) last[p]={date:"",co:"Vyltic",amount:0}; });
+  Object.keys(last).sort().forEach(p=>c.employees.push({id:"e"+Math.random().toString(36).slice(2,8),name:p,company:last[p].co||"Vyltic",center:"",salary:last[p].amount||0,status:latest.includes(last[p].date.slice(0,7))?"current":"stopped",note:""}));
+  return c;
+}
+function refreshAssets(c,entries){
+  const have=new Set(c.assets.map(a=>a.src)); let added=0;
+  entries.forEach(e=>e.lines.forEach((l,i)=>{ if(l.code!=="1500") return; const src=e.n+":"+i; if(have.has(src)) return;
+    const cost=r2((+l.dr)-(+l.cr)); const cat=l.party||"(uncategorised)";
+    c.assets.push({id:"a"+Math.random().toString(36).slice(2,8),src,n:e.n,date:e.date,start:e.date.slice(0,7),category:cat,desc:l.desc||"",cost,co:l.co||"Vyltic",life:cost>0?(DEFAULT_LIVES[cat]||0):(DEFAULT_LIVES[cat]||0)}); added++; }));
+  c.assets.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.n-b.n);
+  return added;
+}
+async function loadClosing(){
+  if(CLOSING) return CLOSING;
+  const entries=await ledgerAll();
+  try{ CLOSING=await openBlob("closing","consolidated"); }catch(e){ CLOSING=null; }
+  if(!CLOSING||!CLOSING.employees){ CLOSING=seedClosing(entries); CLOSING.unsaved=true; }
+  CLOSING.runs=CLOSING.runs||{}; CLOSING.settings=Object.assign({shareRate:1/3,shareParties:["Joud","Rami"],shareAccount:"5040",depAccount:"5400",accDepAccount:"1600",salaryAccount:"5100",carryForward:false},CLOSING.settings||{});
+  return CLOSING;
+}
+async function saveClosing(msg){
+  const local=CLOSING; delete local.unsaved;
+  CLOSING=await ghUpdate("data/closing.enc","consolidated",o=>{ o=o||{}; const runs=Object.assign({},o.runs||{});
+    Object.keys(local.runs||{}).forEach(m=>{ runs[m]=Object.assign({},runs[m]||{},local.runs[m]); });
+    return Object.assign({},o,{v:1,employees:local.employees,assets:local.assets,settings:local.settings,runs}); },msg||"Closing: save");
+  // keep new employee names in the Employees list for the Entry form
+  const missing=CLOSING.employees.map(e=>e.name).filter(n=>n&&!(LISTS["Employees"]||[]).some(x=>x.toLowerCase()===n.toLowerCase()));
+  for(const n of missing){ try{ await addListItem("Employees",n); }catch(e){} }
+}
+function apOwed(entries,party){ return r2(linesWhere(entries,(e,l)=>l.code==="2000"&&l.party===party).reduce((a,{l})=>a+(+l.cr)-(+l.dr),0)); }
+function advanceOf(entries,party,upTo){ return Math.max(0,sumDr(linesWhere(entries,(e,l)=>l.code==="1100"&&l.party===party&&e.date<=upTo))); }
+function accruedIn(entries,party,m,code){ return r2(linesWhere(entries,(e,l)=>l.code===(code||"2000")&&l.party===party&&e.date.slice(0,7)===m).reduce((a,{l})=>a+(+l.cr),0)); }
+function lastCo(entries,party){ let d="",co="Vyltic"; linesWhere(entries,(e,l)=>l.code==="2000"&&l.party===party&&(+l.cr)>0).forEach(({e,l})=>{ if(e.date>=d){ d=e.date; co=l.co; } }); return co; }
+async function payParty(entries,party,amount,label){
+  const date=prompt("Payment date for "+party+" ("+fmt(amount)+"):",today()); if(!date) return null;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)){ toast("Date must be YYYY-MM-DD."); return null; }
+  const amt=+prompt("Amount paid to "+party+":",String(amount)); if(!(amt>0)){ toast("Amount must be positive."); return null; }
+  const co=lastCo(entries,party);
+  const n=await postEntry({date,memo:label+" — paid",lines:[
+    {code:"2000",account:ACC["2000"].name,party,desc:label+" — paid",dr:r2(amt),cr:0,co},
+    {code:"1000",account:ACC["1000"].name,party:"",desc:label+" — paid to "+party,dr:0,cr:r2(amt),co}]});
+  return n;
+}
+function paidCell(entries,party,accrued,label,after){
+  const td=el("td"); const owed=apOwed(entries,party);
+  const cb=el("input"); cb.type="checkbox"; const lab=el("label"); lab.appendChild(cb);
+  if(accrued<=0.004){ lab.append(" —"); cb.disabled=true; }
+  else if(owed<=0.004){ cb.checked=true; cb.disabled=true; lab.append(" paid"); }
+  else { lab.append(" paid? (owed "+fmt(owed)+")"); cb.onchange=async()=>{ cb.disabled=true; try{ const n=await payParty(entries,party,Math.min(accrued,owed),label); if(n){ toast("Paid — entry #"+n+"."); after(); } else { cb.checked=false; cb.disabled=false; } }catch(e){ toast("Not posted: "+e.message,7000); cb.checked=false; cb.disabled=false; } }; }
+  td.appendChild(lab); return td;
+}
+
+/* ---- Employees tab ---- */
+function viewEmployees(m){
+  m.appendChild(el("div","xlhead","EMPLOYEES — who is on payroll, where, and for how much"));
+  m.appendChild(el("p","meta","Set each person’s company, cost center and monthly salary here. The Closing tab reads this when you run the month’s salaries — change the company here (or on the run itself) and the next month books to the new company. Stopped people are skipped."));
+  const zone=el("div"); m.appendChild(zone);
+  loadClosing().then(()=>{
+    zone.innerHTML="";
+    const t=el("table","admtbl"); t.innerHTML='<tr><th>Name</th><th>Company</th><th>Cost center</th><th class="num">Monthly salary</th><th>Status</th><th>Note</th><th></th></tr>';
+    const centers=LISTS["Cost/Profit Centers"]||[];
+    const row=p=>{ const tr=el("tr");
+      const nm=el("input"); nm.value=p.name; nm.placeholder="Name"; nm.setAttribute("list","emplist"); nm.onchange=()=>p.name=nm.value.trim();
+      const co=el("select"); co.innerHTML=myCompanies().map(s=>'<option'+(scopeLabel[s]===p.company?" selected":"")+'>'+scopeLabel[s]+'</option>').join(""); co.onchange=()=>p.company=co.value;
+      const ce=el("select"); ce.innerHTML='<option value="">—</option>'+centers.map(c=>'<option'+(c===p.center?" selected":"")+'>'+esc(c)+'</option>').join(""); ce.onchange=()=>p.center=ce.value;
+      const sa=el("input","amt mono"); sa.type="number"; sa.step="0.01"; sa.min="0"; sa.value=p.salary||0; sa.style.width="110px"; sa.oninput=()=>p.salary=r2(sa.value);
+      const st=el("select"); st.innerHTML='<option value="current"'+(p.status!=="stopped"?" selected":"")+'>Current</option><option value="stopped"'+(p.status==="stopped"?" selected":"")+'>Stopped</option>'; st.onchange=()=>p.status=st.value;
+      const no=el("input"); no.value=p.note||""; no.placeholder="note"; no.oninput=()=>p.note=no.value;
+      const rm=el("button","btn3 danger","Remove"); rm.onclick=()=>{ if(confirm("Remove "+p.name+" from the register? (Nothing in the books changes.)")){ CLOSING.employees=CLOSING.employees.filter(x=>x!==p); render(); } };
+      [nm,co,ce,sa,st,no,rm].forEach(n=>{ const td=el("td"); td.appendChild(n); tr.appendChild(td); }); return tr; };
+    CLOSING.employees.forEach(p=>t.appendChild(row(p)));
+    const dl=el("datalist"); dl.id="emplist"; dl.innerHTML=(LISTS["Employees"]||[]).map(p=>'<option value="'+esc(p)+'">').join(""); zone.appendChild(dl);
+    const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+    const acts=el("div","actions");
+    const add=el("button","btn2","+ Add person"); add.onclick=()=>{ CLOSING.employees.push({id:"e"+Math.random().toString(36).slice(2,8),name:"",company:scopeLabel[myCompanies()[0]],center:"",salary:0,status:"current",note:""}); render(); };
+    const save=el("button","btn","Save register"); save.onclick=async()=>{ if(CLOSING.employees.some(p=>!p.name)){ toast("Every row needs a name."); return; } save.disabled=true; save.textContent="Saving…";
+      try{ await saveClosing("Employees register"); toast("Saved."); }catch(e){ toast("Save failed: "+e.message,7000); } save.disabled=false; save.textContent="Save register"; render(); };
+    acts.append(add,save); zone.appendChild(acts);
+    if(CLOSING.unsaved) zone.appendChild(el("p","meta","This register was pre-filled from the salary entries in the books (latest month = current). Check it and click Save register."));
+    const tot=CLOSING.employees.filter(p=>p.status!=="stopped").reduce((a,p)=>a+(+p.salary||0),0);
+    zone.appendChild(el("p","meta","Monthly payroll of current people: "+fmt(tot)+"."));
+  }).catch(e=>{ zone.innerHTML=""; zone.appendChild(el("p","meta","Couldn’t open the register: "+esc(e.message))); });
+}
+
+/* ---- Closing tab ---- */
+function viewClosing(m){
+  const st=viewClosing.st=viewClosing.st||{month:idxMonth(monthIdx(thisMonth())-1)};
+  m.appendChild(el("div","xlhead","MONTH-END CLOSING — "+monthName(st.month)));
+  const f=el("div","filters"); f.appendChild(el("span","flbl","Month:")); const mi=el("input"); mi.type="month"; mi.value=st.month; mi.max=thisMonth(); mi.onchange=()=>{ st.month=mi.value; render(); }; f.appendChild(mi);
+  f.appendChild(el("span","meta","Entries are dated the last day of the month and post to the books straight away.")); m.appendChild(f);
+  const zone=el("div"); m.appendChild(zone);
+  Promise.all([loadClosing(),ledgerAll()]).then(([c,entries])=>{ zone.innerHTML=""; secSalaries(zone,c,entries,st.month); secDepreciation(zone,c,entries,st.month); secShare(zone,c,entries,st.month); })
+   .catch(e=>{ zone.innerHTML=""; zone.appendChild(el("p","meta","Couldn’t load: "+esc(e.message))); });
+}
+function secSalaries(zone,c,entries,mo){
+  const end=monthEnd(mo); const run=(c.runs[mo]||{}).salaries||{emps:{},entries:[]};
+  zone.appendChild(el("h2","sec","1 · Salaries — "+monthName(mo)));
+  const emps=c.employees.filter(p=>p.status!=="stopped"&&p.name);
+  if(!emps.length){ zone.appendChild(el("p","meta","No current employees in the register (Employees tab).")); return; }
+  const t=el("table","admtbl"); t.innerHTML='<tr><th>Employee</th><th>Company</th><th>Center</th><th class="num">Salary</th><th class="num">Advance to clear</th><th class="num">Accrue (unpaid)</th><th>Booked</th><th>Paid</th></tr>';
+  const plan=[]; let anyToRun=false;
+  emps.forEach(p=>{
+    const booked=r2(sumDr(linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p.name&&e.date.slice(0,7)===mo)));
+    const tr=el("tr"); tr.appendChild(el("td","",esc(p.name)));
+    const row={p,company:p.company,salary:r2(p.salary),advance:0};
+    if(booked>0.004){
+      const src=linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p.name&&e.date.slice(0,7)===mo).map(({e})=>"#"+e.n);
+      tr.appendChild(el("td","",esc([...new Set(linesWhere(entries,(e,l)=>l.code==="5100"&&l.party===p.name&&e.date.slice(0,7)===mo).map(({l})=>l.co))].join("/"))));
+      tr.appendChild(el("td","",esc(p.center||"—"))); tr.appendChild(el("td","num mono",fmt(booked))); tr.appendChild(el("td","num mono","")); tr.appendChild(el("td","num mono",fmt(accruedIn(entries,p.name,mo))));
+      tr.appendChild(el("td","",'<span class="pill vy">booked '+esc([...new Set(src)].join(", "))+'</span>'));
+      tr.appendChild(paidCell(entries,p.name,accruedIn(entries,p.name,mo),p.name+" — "+monthName(mo)+" salary",()=>{ DATA.consolidated=null; render(); }));
+    } else {
+      anyToRun=true; plan.push(row);
+      const co=el("select"); co.innerHTML=myCompanies().map(s=>'<option'+(scopeLabel[s]===p.company?" selected":"")+'>'+scopeLabel[s]+'</option>').join(""); co.onchange=()=>row.company=co.value; const td2=el("td"); td2.appendChild(co); tr.appendChild(td2);
+      tr.appendChild(el("td","",esc(p.center||"—")));
+      const sa=el("input","amt mono"); sa.type="number"; sa.step="0.01"; sa.value=row.salary; sa.style.width="100px"; const td4=el("td","num"); td4.appendChild(sa); tr.appendChild(td4);
+      const adv=advanceOf(entries,p.name,end); row.advance=Math.min(adv,row.salary);
+      const ad=el("input","amt mono"); ad.type="number"; ad.step="0.01"; ad.value=row.advance; ad.style.width="100px"; ad.title="Open advances (1100) for this person: "+fmt(adv); const td5=el("td","num"); td5.appendChild(ad); if(adv>0.004) td5.appendChild(el("div","meta","open "+fmt(adv))); tr.appendChild(td5);
+      const acc=el("td","num mono",fmt(row.salary-row.advance));
+      const upd=()=>{ row.salary=r2(sa.value); row.advance=Math.min(r2(ad.value),row.salary); acc.textContent=fmt(row.salary-row.advance); }; sa.oninput=upd; ad.oninput=upd;
+      tr.appendChild(acc); tr.appendChild(el("td","meta","not yet")); tr.appendChild(el("td","meta","—"));
+    }
+    t.appendChild(tr);
+  });
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  const acts=el("div","actions");
+  if(anyToRun){
+    const b=el("button","btn","Run salaries for "+monthName(mo)); acts.appendChild(b);
+    b.onclick=async()=>{ const todo=plan.filter(r=>r.salary>0.004); if(!todo.length){ toast("Nothing to book."); return; }
+      const tot=todo.reduce((a,r)=>a+r.salary,0);
+      if(!confirm("Book "+todo.length+" salaries for "+monthName(mo)+" (total "+fmt(tot)+", dated "+end+")? Expense goes to 5100, advances cleared from 1100, the rest accrues to 2000 [unpaid].")) return;
+      b.disabled=true; b.textContent="Posting…";
+      try{ const done=[]; const byCo={}; todo.forEach(r=>{ (byCo[r.company]=byCo[r.company]||[]).push(r); });
+        for(const [co,rows] of Object.entries(byCo)){ const lines=[];
+          rows.forEach(r=>{ const d=r.p.name+" — "+monthName(mo)+" salary"+(r.p.center?" ("+r.p.center+")":"");
+            lines.push({code:"5100",account:ACC["5100"].name,party:r.p.name,desc:d,dr:r.salary,cr:0,co});
+            if(r.advance>0.004) lines.push({code:"1100",account:ACC["1100"].name,party:r.p.name,desc:d+" — clears advance",dr:0,cr:r.advance,co});
+            const rest=r2(r.salary-r.advance); if(rest>0.004) lines.push({code:"2000",account:ACC["2000"].name,party:r.p.name,desc:d+" [unpaid]",dr:0,cr:rest,co}); });
+          const n=await postEntry({date:end,memo:"Salaries "+monthName(mo)+" ("+co+")",lines}); done.push(n); }
+        const rec=(c.runs[mo]=c.runs[mo]||{}); rec.salaries=rec.salaries||{emps:{},entries:[]}; rec.salaries.entries.push(...done);
+        todo.forEach(r=>{ rec.salaries.emps[r.p.name]={company:r.company,salary:r.salary,advance:r.advance}; });
+        try{ await saveClosing("Closing: salaries "+mo); }catch(e){}
+        toast("Booked salaries — entries #"+done.join(", #")+".",7000); DATA.consolidated=null; render(); }
+      catch(e){ toast("Not posted: "+e.message,8000); b.disabled=false; b.textContent="Run salaries for "+monthName(mo); } };
+  } else acts.appendChild(el("span","meta","All current employees are booked for this month. Tick Paid as you pay them (each tick posts Dr 2000 / Cr 1000 Cash)."));
+  zone.appendChild(acts);
+}
+function depPlan(c,mo){
+  const mi=monthIdx(mo); const rows=[];
+  c.assets.forEach(a=>{ const life=+a.life||0; if(!life||!a.cost) { rows.push({a,monthly:0,charge:0,catchup:0,booked:0,k:0}); return; }
+    const k=mi-monthIdx(a.start)+1; const monthly=r2(a.cost/life);
+    const due=n=>n<=0?0:n>=life?r2(a.cost):r2(monthly*n);
+    let booked=0; Object.keys(c.runs).forEach(m=>{ if(m<mo&&c.runs[m].depreciation&&c.runs[m].depreciation.assets) booked+=(+c.runs[m].depreciation.assets[a.id]||0); }); booked=r2(booked);
+    const charge=k<1||k>life?0:r2(due(k)-due(k-1)); const catchup=r2(due(Math.min(k-1,life))-booked);
+    rows.push({a,monthly,charge,catchup:a.cost<0?catchup:Math.max(0,catchup),booked,k}); });
+  return rows;
+}
+function secDepreciation(zone,c,entries,mo){
+  const end=monthEnd(mo); const done=(c.runs[mo]||{}).depreciation;
+  zone.appendChild(el("h2","sec","2 · Depreciation — "+monthName(mo)));
+  const added=refreshAssets(c,entries); if(added) zone.appendChild(el("p","meta",added+" new fixed-asset line(s) picked up from the books — set their useful life below."));
+  const rows=depPlan(c,mo);
+  const t=el("table","admtbl"); t.innerHTML='<tr><th>Bought</th><th>Category</th><th>Description</th><th>Co.</th><th class="num">Cost</th><th>Life (months)</th><th class="num">Monthly</th><th class="num">Booked before</th><th class="num">Catch-up</th><th class="num">This month</th></tr>';
+  let tot=0,cu=0;
+  rows.forEach(r=>{ const a=r.a; const tr=el("tr");
+    tr.appendChild(el("td","mono",esc(a.date))); tr.appendChild(el("td","",esc(a.category))); tr.appendChild(el("td","",esc(a.desc))); tr.appendChild(el("td","",'<span class="pill '+(a.co==="Vyltic"?"vy":"we")+'">'+a.co[0]+'</span>'));
+    tr.appendChild(el("td","num mono",fmt(a.cost)));
+    const li=el("input","amt mono"); li.type="number"; li.min="0"; li.step="1"; li.value=a.life||0; li.style.width="80px"; li.title="0 = not depreciated"; li.onchange=()=>{ a.life=Math.max(0,Math.round(+li.value||0)); render(); }; const td=el("td"); td.appendChild(li); tr.appendChild(td);
+    tr.appendChild(el("td","num mono",r.monthly?fmt(r.monthly):"·")); tr.appendChild(el("td","num mono",r.booked?fmt(r.booked):"·")); tr.appendChild(el("td","num mono",r.catchup?fmt(r.catchup):"·")); tr.appendChild(el("td","num mono",r.charge?fmt(r.charge):"·"));
+    tot+=r.charge; cu+=r.catchup; t.appendChild(tr); });
+  const tr=el("tr"); tr.style.fontWeight="700"; tr.innerHTML='<td colspan="8">TOTAL</td><td class="num mono">'+fmt(cu)+'</td><td class="num mono">'+fmt(tot)+'</td>'; t.appendChild(tr);
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  zone.appendChild(el("p","meta","Straight-line from the month of purchase. Life 0 = not depreciated (consumables, deposits, mis-postings). App Development (1710) is not depreciated here. Catch-up = months before "+monthName(mo)+" that were never booked."));
+  const acts=el("div","actions");
+  const sv=el("button","btn2","Save lives"); sv.onclick=async()=>{ sv.disabled=true; try{ await saveClosing("Closing: asset lives"); toast("Saved."); }catch(e){ toast("Save failed: "+e.message,7000); } sv.disabled=false; }; acts.appendChild(sv);
+  if(done) acts.appendChild(el("span","meta","Booked for this month: "+fmt(done.amount)+" — entries #"+(done.entries||[]).join(", #")+(done.catchup?" (incl. catch-up "+fmt(done.catchup)+")":"")+"."));
+  else if(tot>0.004||cu>0.004){
+    const lab=el("label"); const cb=el("input"); cb.type="checkbox"; cb.checked=false; lab.appendChild(cb); lab.append(" include catch-up for earlier months ("+fmt(cu)+")");
+    const b=el("button","btn","Run depreciation for "+monthName(mo));
+    b.onclick=async()=>{ const inc=cb.checked; const amt=r2(tot+(inc?cu:0)); if(amt<=0.004){ toast("Nothing to book."); return; }
+      if(!confirm("Book depreciation of "+fmt(amt)+" for "+monthName(mo)+" (Dr 5400 / Cr 1600, dated "+end+")?")) return;
+      b.disabled=true; b.textContent="Posting…";
+      try{ const per={}; const byCoCat={};
+        rows.forEach(r=>{ const v=r2(r.charge+(inc?r.catchup:0)); if(v<=0.004) return; per[r.a.id]=v; const k=r.a.co+"|"+r.a.category; byCoCat[k]=r2((byCoCat[k]||0)+v); });
+        const byCo={}; Object.keys(byCoCat).forEach(k=>{ const [co,cat]=k.split("|"); (byCo[co]=byCo[co]||[]).push([cat,byCoCat[k]]); });
+        const ns=[];
+        for(const [co,cats] of Object.entries(byCo)){ const lines=[]; cats.forEach(([cat,v])=>{ const d="Depreciation "+monthName(mo)+(inc&&cu>0.004?" (incl. catch-up)":"")+" — "+cat;
+            lines.push({code:"5400",account:ACC["5400"].name,party:cat,desc:d,dr:v,cr:0,co}); lines.push({code:"1600",account:ACC["1600"].name,party:cat,desc:d,dr:0,cr:v,co}); });
+          ns.push(await postEntry({date:end,memo:"Depreciation "+monthName(mo)+" ("+co+")",lines})); }
+        const rec=(c.runs[mo]=c.runs[mo]||{}); rec.depreciation={entries:ns,amount:amt,catchup:inc?r2(cu):0,assets:per};
+        try{ await saveClosing("Closing: depreciation "+mo); }catch(e){}
+        toast("Booked depreciation — entry #"+ns.join(", #")+".",7000); DATA.consolidated=null; render(); }
+      catch(e){ toast("Not posted: "+e.message,8000); b.disabled=false; b.textContent="Run depreciation for "+monthName(mo); } };
+    acts.append(lab,b);
+  } else acts.appendChild(el("span","meta","Nothing to depreciate this month — set useful lives above."));
+  zone.appendChild(acts);
+}
+function shareBasis(entries,mo){
+  let rev=0,del=0,sal=0; linesWhere(entries,(e,l)=>l.co==="Welltold"&&e.date.slice(0,7)===mo).forEach(({l})=>{ if(l.code[0]==="4") rev+=(+l.cr)-(+l.dr); else if(l.code==="5150"||l.code==="5900") del+=(+l.dr)-(+l.cr); else if(l.code==="5100") sal+=(+l.dr)-(+l.cr); });
+  return {rev:r2(rev),del:r2(del),sal:r2(sal),net:r2(rev-del-sal)};
+}
+function secShare(zone,c,entries,mo){
+  const s=c.settings; const end=monthEnd(mo); const parties=s.shareParties;
+  zone.appendChild(el("h2","sec","3 · Welltold profit share — "+monthName(mo)));
+  const b=shareBasis(entries,mo);
+  let carried=0; if(s.carryForward){ const months=[...new Set(entries.filter(e=>e.lines.some(l=>l.co==="Welltold")).map(e=>e.date.slice(0,7)))].filter(k=>k<mo).sort();
+    let lastBooked=""; months.forEach(k=>{ if(linesWhere(entries,(e,l)=>l.code===s.shareAccount&&parties.includes(l.party)&&e.date.slice(0,7)===k).length) lastBooked=k; });
+    months.filter(k=>k>lastBooked).forEach(k=>{ const n=shareBasis(entries,k).net; if(n<0) carried+=n; }); carried=r2(carried); }
+  const base=r2(b.net+carried); const each=base>0?r2(base*s.shareRate):0;
+  const booked=parties.map(p=>({p,amt:r2(sumDr(linesWhere(entries,(e,l)=>l.code===s.shareAccount&&l.party===p&&e.date.slice(0,7)===mo)))}));
+  const isBooked=booked.some(x=>x.amt>0.004);
+  const t=el("table","admtbl"); t.innerHTML='<tr><th>Welltold revenue</th><th>Delivery costs (5150/5900)</th><th>Salaries (5100)</th><th>Net</th>'+(s.carryForward?'<th>Losses carried</th><th>Share base</th>':'')+'<th>⅓ each</th></tr>'+
+    '<tr class="mono"><td class="num">'+fmt(b.rev)+'</td><td class="num">'+fmt(b.del)+'</td><td class="num">'+fmt(b.sal)+'</td><td class="num">'+fmt(b.net)+'</td>'+(s.carryForward?'<td class="num">'+fmt(carried)+'</td><td class="num">'+fmt(base)+'</td>':'')+'<td class="num">'+fmt(each)+'</td></tr>';
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  const t2=el("table","admtbl"); t2.innerHTML='<tr><th>Partner</th><th class="num">Share</th><th>Booked</th><th>Paid</th></tr>';
+  booked.forEach(({p,amt})=>{ const tr=el("tr"); tr.appendChild(el("td","",esc(p))); tr.appendChild(el("td","num mono",fmt(amt>0.004?amt:each)));
+    tr.appendChild(el("td","",amt>0.004?'<span class="pill we">booked '+esc([...new Set(linesWhere(entries,(e,l)=>l.code===s.shareAccount&&l.party===p&&e.date.slice(0,7)===mo).map(({e})=>"#"+e.n))].join(", "))+'</span>':'<span class="meta">not yet</span>'));
+    if(amt>0.004) tr.appendChild(paidCell(entries,p,accruedIn(entries,p,mo),"Welltold profit share — "+p+" ("+monthName(mo)+")",()=>{ DATA.consolidated=null; render(); })); else tr.appendChild(el("td","meta","—"));
+    t2.appendChild(tr); });
+  const wrap2=el("div","tablewrap"); wrap2.style.padding="8px 12px"; wrap2.appendChild(t2); zone.appendChild(wrap2);
+  const acts=el("div","actions");
+  const cf=el("label"); const cfc=el("input"); cfc.type="checkbox"; cfc.checked=!!s.carryForward; cfc.onchange=async()=>{ s.carryForward=cfc.checked; try{ await saveClosing("Closing: share setting"); }catch(e){} render(); }; cf.appendChild(cfc); cf.append(" carry losses forward (a loss month reduces the next positive month’s base)"); acts.appendChild(cf);
+  if(isBooked) acts.appendChild(el("span","meta","Booked for this month."));
+  else if(base>0.004){ const bt=el("button","btn","Run profit share for "+monthName(mo));
+    bt.onclick=async()=>{ if(!confirm("Book "+parties.join(" + ")+" profit share of "+fmt(each)+" each for "+monthName(mo)+" (Dr "+s.shareAccount+" / Cr 2000 [unpaid], Welltold, dated "+end+")?")) return;
+      bt.disabled=true; bt.textContent="Posting…";
+      try{ const lines=[]; parties.forEach(p=>{ const d="Welltold profit share — "+p+" (1/3 of "+monthName(mo)+" NET "+fmt(base)+")";
+          lines.push({code:s.shareAccount,account:ACC[s.shareAccount].name,party:p,desc:d,dr:each,cr:0,co:"Welltold"}); lines.push({code:"2000",account:ACC["2000"].name,party:p,desc:d+" [unpaid]",dr:0,cr:each,co:"Welltold"}); });
+        const n=await postEntry({date:end,memo:"Welltold profit share "+monthName(mo),lines});
+        const rec=(c.runs[mo]=c.runs[mo]||{}); rec.share={entry:n,net:b.net,base,each}; try{ await saveClosing("Closing: profit share "+mo); }catch(e){}
+        toast("Booked profit share — entry #"+n+".",7000); DATA.consolidated=null; render(); }
+      catch(e){ toast("Not posted: "+e.message,8000); bt.disabled=false; bt.textContent="Run profit share for "+monthName(mo); } };
+    acts.appendChild(bt); }
+  else acts.appendChild(el("span","meta",b.net<0?"Loss month ("+fmt(b.net)+") — no share accrues.":"Nothing to share this month."));
+  zone.appendChild(acts);
+  zone.appendChild(el("p","meta","Net = Welltold revenue − delivery costs (5150/5900) − Welltold salaries (5100). Each partner gets ⅓ of a positive net, booked to "+s.shareAccount+" "+esc(ACC[s.shareAccount]?ACC[s.shareAccount].name:"")+" and owed on 2000 until you tick Paid."));
+}
+
 /* ---------- admin (people & permissions; saved straight to the site via GitHub) ---------- */
 async function loadAdmin(){
   if(ADMIN) return ADMIN;
@@ -935,6 +1197,7 @@ function viewGuide(m){
   +'<h3>Signing in</h3><p>Email and password, like any site. An admin adds you and gives you your first password. Forgot it? An admin resets it in seconds.</p>'
   +'<h3>Roles</h3><p><strong>Viewer</strong> reads the reports and can draft an entry to send to Ahmed. <strong>Maker</strong> also posts entries straight into the books (Entry tab), adds names to the Lists and adds accounts to the CoA. <strong>Admin</strong> is a Maker who also manages people in the Admin tab.</p>'
   +'<h3>Posting an entry</h3><p>Entry tab → New entry → pick the company and date, add the lines, make sure it says <em>balanced</em>, then <strong>Post entry</strong>. It gets the next number and shows in the GL and every report at once (other people see it on their next refresh). Cross-company entries, month-end items and corrections still go through Ahmed — there is no delete; a mistake is fixed with a reversing entry.</p>'
+  +'<h3>Month-end (Employees &amp; Closing tabs)</h3><p>Makers with both companies see two more tabs. <strong>Employees</strong> is the payroll register: company, cost center, monthly salary, current/stopped — change someone&rsquo;s company there and the next month books to the new company. <strong>Closing</strong> runs the month: salaries (expense to 5100, advances cleared from 1100, the rest owed on 2000; tick <em>Paid</em> per person when you pay and it posts Dr 2000 / Cr 1000), depreciation (straight-line from the asset register, with catch-up for months never booked) and the Welltold profit share (⅓ each of a positive net; loss month = nothing). Everything it books is a normal entry you can see in the GL.</p>'
   +'<h3>Reading the numbers</h3><p>Cash is one pooled bank balance for the whole entity — a company&rsquo;s share can be negative (the other side funds it). Lines marked <code>IC Intercompany</code> only balance cross-company entries inside a single-company view. The Welltold profit share (⅓ Joud + ⅓ Rami of the monthly net) is booked centrally at month-end.</p>'
   +'<h3>Briefing for your AI</h3>';
   const cp=el("button","btn2","Copy AI briefing"); cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(RULES).then(()=>toast("Copied."));};
