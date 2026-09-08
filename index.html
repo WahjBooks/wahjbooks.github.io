@@ -997,6 +997,8 @@ function seedClosing(entries){
   return c;
 }
 function refreshAssets(c,entries){
+  const live=new Set(); entries.forEach(e=>e.lines.forEach((l,i)=>{ if(l.code==="1500") live.add(e.n+":"+i); }));
+  c.assets=c.assets.filter(a=>!a.src||live.has(a.src)||a.disposal);   // a purchase reclassed or deleted from the books leaves the register too
   const have=new Set(c.assets.map(a=>a.src)); let added=0;
   entries.forEach(e=>e.lines.forEach((l,i)=>{ if(l.code!=="1500") return; const src=e.n+":"+i; if(have.has(src)) return;
     const cost=r2((+l.dr)-(+l.cr)); const cat=l.party||"(uncategorised)";
@@ -1335,8 +1337,8 @@ function secShare(zone,c,entries,mo){
   const rerun=!!one&&one.lines.every(l=>l.co==="Welltold"&&(l.code===s.shareAccount||l.code==="2000")&&parties.includes(l.party));
   const bookedEach=one?r2(one.lines.filter(l=>l.code===s.shareAccount&&l.party===parties[0]).reduce((a,l)=>a+(+l.dr)-(+l.cr),0)):0;
   const stale=rerun&&Math.abs(bookedEach-each)>0.004;
-  const t=el("table","admtbl"); t.innerHTML='<tr><th>Welltold revenue</th><th>Delivery costs (5150/5900)</th><th>Salaries (5100)</th><th>Net</th><th>⅓ each</th></tr>'+
-    '<tr class="mono"><td class="num">'+fmt(b.rev)+'</td><td class="num">'+fmt(b.del)+'</td><td class="num">'+fmt(b.sal)+'</td><td class="num">'+fmt(b.net)+'</td><td class="num">'+fmt(each)+'</td></tr>';
+  const t=el("table","admtbl"); t.innerHTML='<tr><th>Welltold revenue</th><th>Delivery costs (5150/5900)</th><th>Salaries (5100)</th><th>Other Welltold costs</th><th>Net</th><th>⅓ each</th></tr>'+
+    '<tr class="mono"><td class="num">'+fmt(b.rev)+'</td><td class="num">'+fmt(b.del)+'</td><td class="num">'+fmt(b.sal)+'</td><td class="num">'+fmt(b.oth)+'</td><td class="num">'+fmt(b.net)+'</td><td class="num">'+fmt(each)+'</td></tr>';
   const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
   const t2=el("table","admtbl"); t2.innerHTML='<tr><th>Partner</th><th class="num">Share now</th><th class="num">Booked</th><th>Entry</th><th>Paid</th><th class="num">Owed to partner now</th></tr>';
   booked.forEach(({p,amt})=>{ const tr=el("tr"); tr.appendChild(el("td","",esc(p))); tr.appendChild(el("td","num mono",fmt(each))); tr.appendChild(el("td","num mono",Math.abs(amt)>0.004?fmt(amt):"—"));
@@ -1370,7 +1372,7 @@ function secShare(zone,c,entries,mo){
   else if(Math.abs(each)>0.004){ const bt=el("button","btn",(loss?"Run loss share for ":"Run profit share for ")+monthName(mo)); bt.onclick=()=>book(bt,null); acts.appendChild(bt); }
   else acts.appendChild(el("span","meta","Nothing to share this month (net is zero)."));
   zone.appendChild(acts);
-  zone.appendChild(el("p","meta","Net = Welltold revenue − delivery costs (5150/5900) − Welltold salaries (5100). Each partner gets ⅓ of the net every month: a profit is booked Dr "+s.shareAccount+" / Cr 2000 [unpaid] and owed until you tick Paid; a loss is booked the other way (Dr 2000 / Cr "+s.shareAccount+"), netting it against what is owed to the partner. Run it as often as you like — a re-run rewrites the same entry with the month's latest figures."));
+  zone.appendChild(el("p","meta","Net = Welltold revenue − delivery costs (5150/5900) − Welltold salaries (5100) − every other cost booked to Welltold (software, events, office…) — i.e. Welltold's profit before the share. Each partner gets ⅓ of the net every month: a profit is booked Dr "+s.shareAccount+" / Cr 2000 [unpaid] and owed until you tick Paid; a loss is booked the other way (Dr 2000 / Cr "+s.shareAccount+"), netting it against what is owed to the partner. Run it as often as you like — a re-run rewrites the same entry with the month's latest figures."));
 }
 
 /* ---- Closing tab ---- */
@@ -1425,9 +1427,10 @@ function secDepreciation(zone,c,entries,mo){
   } else acts.appendChild(el("span","meta","Nothing to depreciate this month — set useful lives in the Assets tab."));
   zone.appendChild(acts);
 }
-function shareBasis(entries,mo){
-  let rev=0,del=0,sal=0; linesWhere(entries,(e,l)=>l.co==="Welltold"&&e.date.slice(0,7)===mo).forEach(({l})=>{ if(l.code[0]==="4") rev+=(+l.cr)-(+l.dr); else if(l.code==="5150"||l.code==="5900") del+=(+l.dr)-(+l.cr); else if(l.code==="5100") sal+=(+l.dr)-(+l.cr); });
-  return {rev:r2(rev),del:r2(del),sal:r2(sal),net:r2(rev-del-sal)};
+function shareBasis(entries,mo){   // Welltold net for the month = revenue − every Welltold cost except the share itself (Ahmed 8 Sep 2026: "the share is on the net profit")
+  const sa=(CLOSING&&CLOSING.settings&&CLOSING.settings.shareAccount)||"5040";
+  let rev=0,del=0,sal=0,oth=0; linesWhere(entries,(e,l)=>l.co==="Welltold"&&e.date.slice(0,7)===mo).forEach(({l})=>{ if(l.code[0]==="4") rev+=(+l.cr)-(+l.dr); else if(l.code==="5150"||l.code==="5900") del+=(+l.dr)-(+l.cr); else if(l.code==="5100") sal+=(+l.dr)-(+l.cr); else if(l.code[0]==="5"&&l.code!==sa) oth+=(+l.dr)-(+l.cr); });
+  return {rev:r2(rev),del:r2(del),sal:r2(sal),oth:r2(oth),net:r2(rev-del-sal-oth)};
 }
 
 /* ---------- fixed assets: register, lives, ready-for-use, disposals ---------- */
