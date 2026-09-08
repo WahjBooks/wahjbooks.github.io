@@ -184,6 +184,7 @@ table.gl tr.tbg td{font-weight:700;background:var(--surface2);border-top:2px sol
 table.gl td.i1{padding-left:28px}
 table.gl td.i2{padding-left:48px;color:var(--muted)}
 table.gl tr.tbp td{font-size:12px}
+label.tick{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -426,7 +427,7 @@ function repState(key,defaults){
   return st;
 }
 function repChange(st,ch){ Object.assign(st,ch); if(ch.from!==undefined) REP.from=ch.from; if(ch.to!==undefined){ REP.to=ch.to; REP.asOf=ch.to; } if(ch.asOf!==undefined) REP.asOf=ch.asOf; repSave(); render(); }
-function optRow(m,st,onchange,views){
+function optRow(m,st,onchange,views,ticks){
   const f=el("div","filters");
   if(st.level!==undefined){
     f.appendChild(el("span","flbl","Level:"));
@@ -445,6 +446,7 @@ function optRow(m,st,onchange,views){
   if(st.asOf!==undefined){
     f.appendChild(el("span","flbl","As at:")); const a=el("input"); a.type="date"; a.value=st.asOf; a.onchange=()=>onchange({asOf:a.value}); f.appendChild(a);
   }
+  if(ticks) ticks.forEach(([k,label,title])=>{ const lab=el("label","flbl tick"); const cb=el("input"); cb.type="checkbox"; cb.checked=!!st[k]; cb.onchange=()=>onchange({[k]:cb.checked}); lab.appendChild(cb); lab.append(" "+label); if(title) lab.title=title; f.appendChild(lab); });
   f.appendChild(el("span","meta","Company: "+scopeLabel[scope]));
   m.appendChild(f);
 }
@@ -557,30 +559,39 @@ function viewCF(m){
   optRow(m,st,ch=>repChange(st,ch),PLVIEWS);
   m.appendChild(xlGrid(cfGrid(st.level,cols),cols));
 }
+const TBVIEWS=[["total","Total — Beginning / Debit / Credit / Ending"],["monthly","By month"],["cumulative","By month, cumulative (YTD)"]];
 function viewTB(m){
-  const st=repState("tb",{level:3,from:"2024-01-01",to:lastDate()});
-  m.appendChild(el("div","xlhead","TRIAL BALANCE — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]));
-  optRow(m,st,ch=>repChange(st,ch));
+  const st=repState("tb",{level:3,view:"total",ob:true,from:"2024-01-01",to:lastDate()});
+  m.appendChild(el("div","xlhead","TRIAL BALANCE — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]+(st.view==="cumulative"?"   ·   cumulative from "+st.from:st.view==="monthly"?"   ·   month by month":"")+(st.ob?"":"   ·   movements only, no opening balance")));
+  optRow(m,st,ch=>repChange(st,ch),TBVIEWS,[["ob","OB","Opening balance brought forward from the start of the company (everything dated before the From date)"]]);
+  const ms=st.view==="total"?[]:months().filter(k=>k>=st.from.slice(0,7)&&k<=st.to.slice(0,7));
+  const mi={}; ms.forEach((k,i)=>mi[k]=i);
+  const fresh=()=>({beg:0,d:0,c:0,md:ms.map(()=>0),mc:ms.map(()=>0)});
   const acc={}, par={};
-  const add=(o,k,e,l)=>{ const a=o[k]=o[k]||{beg:0,d:0,c:0}; if(e.date<st.from) a.beg+=(+l.dr)-(+l.cr); else if(e.date<=st.to){ a.d+=+l.dr; a.c+=+l.cr; } };
+  const add=(o,k,e,l)=>{ const a=o[k]=o[k]||fresh(); if(e.date<st.from) a.beg+=(+l.dr)-(+l.cr); else if(e.date<=st.to){ a.d+=+l.dr; a.c+=+l.cr; const i=mi[e.date.slice(0,7)]; if(i!==undefined){ a.md[i]+=+l.dr; a.mc[i]+=+l.cr; } } };
   allLines().forEach(({e,l})=>{ add(acc,l.code,e,l); if(st.level>=10) add(par,l.code+"\u0000"+(l.party||"(unassigned)"),e,l); });
   const live=a=>Math.abs(a.beg)>=0.005||Math.abs(a.d)>=0.005||Math.abs(a.c)>=0.005;
-  const cells=a=>'<td class="num">'+fmt(a.beg)+'</td><td class="num">'+fmt(a.d)+'</td><td class="num">'+fmt(a.c)+'</td><td class="num">'+fmt(a.beg+a.d-a.c)+'</td>';
-  const sum=(t,a)=>{ t.beg+=a.beg; t.d+=a.d; t.c+=a.c; };
+  const ob=!!st.ob;
+  let cols, vals;   // the columns, and each row's figures in that order
+  if(st.view==="total"){ cols=ob?["Beginning","Debit","Credit","Ending"]:["Debit","Credit","Net"]; vals=a=>ob?[a.beg,a.d,a.c,a.beg+a.d-a.c]:[a.d,a.c,a.d-a.c]; }
+  else if(st.view==="monthly"){ cols=[...(ob?["OB"]:[]),...ms.map(mlabel),"Total",...(ob?["Ending"]:[])]; vals=a=>{ const mv=ms.map((k,i)=>a.md[i]-a.mc[i]); const tot=a.d-a.c; return [...(ob?[a.beg]:[]),...mv,tot,...(ob?[a.beg+tot]:[])]; }; }
+  else { cols=ms.map(mlabel); vals=a=>{ let run=ob?a.beg:0; return ms.map((k,i)=>{ run+=a.md[i]-a.mc[i]; return run; }); }; }
+  const cells=a=>vals(a).map(v=>'<td class="num">'+(Math.abs(v)>=0.005?fmt(v):(st.view==="total"?fmt(0):"·"))+'</td>').join("");
+  const sum=(t,a)=>{ t.beg+=a.beg; t.d+=a.d; t.c+=a.c; a.md.forEach((v,i)=>{ t.md[i]+=v; t.mc[i]+=a.mc[i]; }); };
   const grp=c=>(ACC[c]||{}).group||(c==="IC"?"Intercompany":"Other");
   const order=[]; COA.forEach(x=>{ const g=x[4]||x[2]; if(!order.includes(g)) order.push(g); }); Object.keys(acc).forEach(c=>{ if(!order.includes(grp(c))) order.push(grp(c)); });
   const w=el("div","tablewrap xlwrap");
-  let h='<table class="gl" style="min-width:640px"><thead><tr><th>Code</th><th>Account</th><th class="num">Beginning</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Ending</th></tr></thead><tbody>';
-  const T={beg:0,d:0,c:0};
+  let h='<table class="gl" style="min-width:640px"><thead><tr><th>Code</th><th>Account</th>'+cols.map(c=>'<th class="num">'+esc(c)+'</th>').join("")+'</tr></thead><tbody>';
+  const T=fresh();
   order.forEach(g=>{ const codes=Object.keys(acc).filter(c=>grp(c)===g&&live(acc[c])).sort(); if(!codes.length) return;
-    const G={beg:0,d:0,c:0}; codes.forEach(c=>sum(G,acc[c])); sum(T,G);
+    const G=fresh(); codes.forEach(c=>sum(G,acc[c])); sum(T,G);
     h+='<tr class="tbg"><td></td><td>'+esc(g.toUpperCase())+'</td>'+cells(G)+'</tr>';
     if(st.level>=3) codes.forEach(c=>{ h+='<tr><td class="mono">'+esc(c)+'</td><td class="i1">'+esc((ACC[c]||{}).name||c)+'</td>'+cells(acc[c])+'</tr>';
       if(st.level>=10){ const ps=Object.keys(par).filter(k=>k.startsWith(c+"\u0000")&&live(par[k])).map(k=>k.slice(c.length+1)).sort();
         if(!(ps.length===1&&ps[0]==="(unassigned)")) ps.forEach(p=>{ h+='<tr class="tbp"><td></td><td class="i2">'+esc(p)+'</td>'+cells(par[c+"\u0000"+p])+'</tr>'; }); } }); });
   h+='<tr style="font-weight:700"><td></td><td>TOTAL</td>'+cells(T)+'</tr>';
   w.innerHTML=h+'</tbody></table>'; m.appendChild(w);
-  m.appendChild(el("p","meta","Beginning = balance before the From date; Debit/Credit = movements in the period; Ending = Beginning + Debit − Credit (credit balances show negative). Level 1 = sections, 3 = accounts, 10 = every party under each account (customers, vendors, employees…). Ending total is 0.00 when the ledger balances"+(scope!=="consolidated"?" (single-company views balance through the IC Intercompany line).":".")));
+  m.appendChild(el("p","meta",(st.view==="total"?"Beginning = balance brought forward before the From date; Debit/Credit = movements in the period; Ending = Beginning + Debit − Credit.":st.view==="monthly"?"Each month column is that month's net movement (Debit − Credit); Total = the whole period"+(ob?"; OB = balance brought forward before the From date, Ending = OB + Total.":"."):"Each month column is the running total from the From date"+(ob?" on top of the opening balance, i.e. the balance at that month-end.":" (movements only — tick OB to start from the opening balance)."))+" Credit balances show negative. Level 1 = sections, 3 = accounts, 10 = every party under each account (customers, vendors, employees…). The TOTAL row is 0.00 in every column when the ledger balances"+(scope!=="consolidated"?" (single-company views balance through the IC Intercompany line).":".")));
 }
 function viewGL(m){
   const f=el("div","filters");
