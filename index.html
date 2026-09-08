@@ -185,6 +185,12 @@ table.gl td.i1{padding-left:28px}
 table.gl td.i2{padding-left:48px;color:var(--muted)}
 table.gl tr.tbp td{font-size:12px}
 label.tick{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+table.gl.tb th:nth-child(1),table.gl.tb td:nth-child(1){position:sticky;left:0;z-index:2;background:var(--surface);width:52px;min-width:52px}
+table.gl.tb th:nth-child(2),table.gl.tb td:nth-child(2){position:sticky;left:var(--c1,72px);z-index:2;background:var(--surface);min-width:200px;max-width:320px}
+table.gl.tb th:nth-child(1),table.gl.tb th:nth-child(2),table.gl.glx th:first-child,table.emps th:first-child{z-index:4}
+table.gl.tb tr.tbg td:nth-child(1),table.gl.tb tr.tbg td:nth-child(2){background:var(--surface2)}
+table.gl.glx td:first-child,table.gl.glx th:first-child{position:sticky;left:0;z-index:2;background:var(--surface)}
+table.emps td:first-child,table.emps th:first-child{position:sticky;left:0;z-index:2;background:var(--surface)}
 </style>
 </head>
 <body>
@@ -581,7 +587,7 @@ function viewTB(m){
   const grp=c=>(ACC[c]||{}).group||(c==="IC"?"Intercompany":"Other");
   const order=[]; COA.forEach(x=>{ const g=x[4]||x[2]; if(!order.includes(g)) order.push(g); }); Object.keys(acc).forEach(c=>{ if(!order.includes(grp(c))) order.push(grp(c)); });
   const w=el("div","tablewrap xlwrap");
-  let h='<table class="gl" style="min-width:640px"><thead><tr><th>Code</th><th>Account</th>'+cols.map(c=>'<th class="num">'+esc(c)+'</th>').join("")+'</tr></thead><tbody>';
+  let h='<table class="gl tb" style="min-width:640px"><thead><tr><th>Code</th><th>Account</th>'+cols.map(c=>'<th class="num">'+esc(c)+'</th>').join("")+'</tr></thead><tbody>';
   const T=fresh();
   order.forEach(g=>{ const codes=Object.keys(acc).filter(c=>grp(c)===g&&live(acc[c])).sort(); if(!codes.length) return;
     const G=fresh(); codes.forEach(c=>sum(G,acc[c])); sum(T,G);
@@ -591,6 +597,7 @@ function viewTB(m){
         if(!(ps.length===1&&ps[0]==="(unassigned)")) ps.forEach(p=>{ h+='<tr class="tbp"><td></td><td class="i2">'+esc(p)+'</td>'+cells(par[c+"\u0000"+p])+'</tr>'; }); } }); });
   h+='<tr style="font-weight:700"><td></td><td>TOTAL</td>'+cells(T)+'</tr>';
   w.innerHTML=h+'</tbody></table>'; m.appendChild(w);
+  { const tb=w.querySelector("table.tb"), c1=tb.querySelector("th"); if(c1) tb.style.setProperty("--c1",Math.ceil(c1.getBoundingClientRect().width)+"px"); }   // the Account column sticks right after the Code column, whatever its width
   m.appendChild(el("p","meta",(st.view==="total"?"Beginning = balance brought forward before the From date; Debit/Credit = movements in the period; Ending = Beginning + Debit − Credit.":st.view==="monthly"?"Each month column is that month's net movement (Debit − Credit); Total = the whole period"+(ob?"; OB = balance brought forward before the From date, Ending = OB + Total.":"."):"Each month column is the running total from the From date"+(ob?" on top of the opening balance, i.e. the balance at that month-end.":" (movements only — tick OB to start from the opening balance)."))+" Credit balances show negative. Level 1 = sections, 3 = accounts, 10 = every party under each account (customers, vendors, employees…). The TOTAL row is 0.00 in every column when the ledger balances"+(scope!=="consolidated"?" (single-company views balance through the IC Intercompany line).":".")));
 }
 function viewGL(m){
@@ -614,7 +621,7 @@ function viewGL(m){
   };
   const draw=()=>{
     const list=rows();
-    let h='<table class="gl"><thead><tr><th>#</th><th>Date</th><th>Code</th><th>Account</th><th>Party</th><th>Description</th><th class="num">Debit</th><th class="num">Credit</th><th>Co.</th></tr></thead><tbody>';
+    let h='<table class="gl glx"><thead><tr><th>#</th><th>Date</th><th>Code</th><th>Account</th><th>Party</th><th>Description</th><th class="num">Debit</th><th class="num">Credit</th><th>Co.</th></tr></thead><tbody>';
     list.slice(0,600).forEach(({e,l})=>{
       h+='<tr><td class="mono">'+e.n+'</td><td class="mono">'+esc(e.date)+'</td><td class="mono">'+esc(l.code)+'</td><td>'+esc(l.account)+'</td><td>'+esc(l.party||"")+'</td><td>'+esc(l.desc||"")+'</td><td class="num">'+((+l.dr)?fmt(+l.dr):"")+'</td><td class="num">'+((+l.cr)?fmt(+l.cr):"")+'</td><td><span class="pill '+(l.co==="Vyltic"?"vy":"we")+'">'+(l.co||"?")[0]+'</span></td></tr>'; });
     w.innerHTML=h+'</tbody></table>';
