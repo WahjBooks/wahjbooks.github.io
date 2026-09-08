@@ -1152,24 +1152,29 @@ function secSalaries(zone,c,entries,mo){
   const end=monthEnd(mo);
   zone.appendChild(el("h2","sec","1 · Salaries — "+monthName(mo)));
   const emps=c.employees.filter(p=>p.name&&empActiveIn(p,mo));
+  const names=new Set(c.employees.map(p=>p.name).filter(Boolean));
   const capA=treatAccount(c,"capital"), expA=treatAccount(c,"expense");
-  const rec=(c.runs[mo]||{}).salaries;
-  // the entries the site's own run booked for this month (still in the ledger, still salary-shaped) — a re-run rewrites these in place
-  const salaryShaped=e=>e.date.slice(0,7)===mo&&e.lines.length>0&&e.lines.every(l=>l.code===expA||l.code===capA||l.code==="1100"||l.code==="2000");
-  const site=[...new Set(((rec&&rec.entries)||[]).map(Number))].map(n=>entries.find(e=>+e.n===n)).filter(e=>e&&salaryShaped(e));
-  const siteNos=site.map(e=>+e.n); const siteRef=siteNos.map(n=>"#"+n).join(", ");
+  const isSal=l=>l.code===expA||l.code===capA;
+  const rec=(c.runs[mo]||{}).salaries; const recNos=[...new Set(((rec&&rec.entries)||[]).map(Number))]; const adNos=[...new Set(((rec&&rec.adopted)||[]).map(Number))];
   const entryCo=e=>e.lines[0].co;
-  const base=siteNos.length?entries.filter(e=>!siteNos.includes(+e.n)):entries;   // the books without the site's run, so a re-run works out advances and bookings afresh
+  // the month's salary entries — rewritten in place by a re-run: the site's own run, plus salary entries booked by hand
+  // (one company; only salary / advance / payable lines; every salary line a register name and described as a salary)
+  const shaped=e=>e.date.slice(0,7)===mo&&e.lines.length>0&&e.lines.some(isSal)&&e.lines.every(l=>(isSal(l)||l.code==="1100"||l.code==="2000")&&l.co===entryCo(e));
+  const handBooked=e=>e.lines.filter(isSal).every(l=>names.has(l.party)&&/salar/i.test((l.desc||"")+" "+(e.memo||"")));
+  const site=entries.filter(e=>shaped(e)&&(recNos.includes(+e.n)||adNos.includes(+e.n)||handBooked(e))).sort((a,b)=>+a.n-+b.n);
+  const siteNos=site.map(e=>+e.n); const siteRef=siteNos.map(n=>"#"+n).join(", ");
+  const base=siteNos.length?entries.filter(e=>!siteNos.includes(+e.n)):entries;   // the books without those entries, so a re-run works out advances and bookings afresh
   if(!emps.length&&!siteNos.length){ zone.appendChild(el("p","meta","Nobody is on payroll in "+monthName(mo)+" (Employees tab: check the start and end dates).")); return; }
   const t=el("table","admtbl"); t.innerHTML='<tr><th>Employee</th><th>Period</th><th>Company</th><th>Center</th><th>Books to</th><th class="num">Salary</th><th class="num">Advance to clear</th><th class="num">Accrue (unpaid)</th><th>Booked</th><th>Paid</th></tr>';
-  const plan=[]; let anyToRun=false; const skipped=[], dropped=[]; const carry={}; const seen=new Set();
+  const plan=[]; let anyToRun=false; const skipped=[], dropped=[], changes=[]; const carry={}; const seen=new Set();
   const siteLinesOf=name=>{ const out=[]; site.forEach(e=>e.lines.forEach(l=>{ if(l.party===name) out.push({e,l}); })); return out; };
+  const holder=name=>site.find(e=>e.lines.some(l=>isSal(l)&&l.party===name));   // the entry that holds this person's salary today
   emps.forEach(p=>{
     seen.add(p.name);
     const mine=salaryLinesFor(c,base,p.name,mo); const booked=r2(sumDr(mine));
-    const inSite=siteLinesOf(p.name); const bookedSite=r2(sumDr(inSite.filter(({l})=>l.code===expA||l.code===capA))); const ref=[...new Set(inSite.map(({e})=>"#"+e.n))].join(", ");
-    if(booked>0.004){   // booked by hand (or by an older run that is no longer re-runnable): shown as is, never rewritten
-      inSite.forEach(({e,l})=>{ (carry[entryCo(e)]=carry[entryCo(e)]||[]).push(l); });   // any line of theirs in the site's entries is kept exactly as it is
+    const inSite=siteLinesOf(p.name); const bookedSite=r2(sumDr(inSite.filter(({l})=>isSal(l)))); const ref=[...new Set(inSite.map(({e})=>"#"+e.n))].join(", ");
+    if(booked>0.004){   // booked in an entry the re-run does not touch (e.g. paid in cash straight to 1710): shown as is
+      inSite.forEach(({e,l})=>{ (carry[+e.n]=carry[+e.n]||[]).push(l); });   // any line of theirs in a re-runnable entry is kept exactly as it is
       const tr=el("tr"); tr.appendChild(el("td","",esc(p.name))); tr.appendChild(el("td","meta","—"));
       tr.appendChild(el("td","",esc([...new Set(mine.map(({l})=>l.co))].join("/"))));
       tr.appendChild(el("td","",esc(empCurrent(p,end).center||"—"))); tr.appendChild(el("td","mono",esc([...new Set(mine.map(({l})=>l.code))].join("/"))));  tr.appendChild(el("td","num mono",fmt(r2(booked+bookedSite)))); tr.appendChild(el("td","num mono","")); tr.appendChild(el("td","num mono",fmt(accruedIn(entries,p.name,mo))));
@@ -1181,6 +1186,8 @@ function secSalaries(zone,c,entries,mo){
     if(!segs.length){ skipped.push(p.name+(dw.override?" (0 days)":"")); if(bookedSite>0.004) dropped.push(p.name+" ("+fmt(bookedSite)+" in "+ref+")"); return; }
     anyToRun=true;
     const adv=advanceOf(base,p.name,end);
+    const planned=r2(segs.reduce((a,x)=>a+x.amount,0)); const same=Math.abs(bookedSite-planned)<0.004;
+    if(bookedSite>0.004&&!same) changes.push(p.name+" "+fmt(bookedSite)+" → "+fmt(planned)); else if(!(bookedSite>0.004)&&siteNos.length) changes.push(p.name+" not booked yet ("+fmt(planned)+")");
     segs.forEach((g,i)=>{
       const row={p,g,company:g.a.company,treat:g.a.treat||"expense",salary:g.amount,advance:i===0?Math.min(adv,g.amount):0}; plan.push(row);
       const tr=el("tr"); tr.appendChild(el("td","",i===0?esc(p.name):""));
@@ -1196,37 +1203,38 @@ function secSalaries(zone,c,entries,mo){
       else { td5.className="num mono"; td5.textContent=""; sa.oninput=()=>{ row.salary=r2(sa.value); acc.textContent=fmt(row.salary); }; }
       tr.appendChild(td5); tr.appendChild(acc);
       if(i>0){ tr.appendChild(el("td","meta","")); tr.appendChild(el("td","meta","")); }
-      else if(bookedSite>0.004){   // booked by the site's run — the row shows today's figures, the Booked column what is in the entry now
-        const same=Math.abs(bookedSite-segs.reduce((a,x)=>a+x.amount,0))<0.004;
+      else if(bookedSite>0.004){   // already booked — the row shows today's figures, the Booked column what the entry holds now
         tr.appendChild(el("td","",'<span class="pill vy">booked '+esc(ref)+'</span> <span class="mono'+(same?"":" warn")+'">'+fmt(bookedSite)+'</span>'+(same?"":'<div class="meta">re-run to update</div>')));
         tr.appendChild(paidCell(entries,p.name,accruedIn(entries,p.name,mo),p.name+" — "+monthName(mo)+" salary",()=>{ DATA.consolidated=null; render(); },bookedSite)); }
       else { tr.appendChild(el("td","meta","not yet")); tr.appendChild(el("td","meta","after run")); }
       t.appendChild(tr);
     });
   });
-  // people in the site's entries who are no longer on the register for this month
-  site.forEach(e=>e.lines.forEach(l=>{ if((l.code===expA||l.code===capA)&&l.party&&!seen.has(l.party)){ seen.add(l.party); dropped.push(l.party+" ("+fmt(r2(l.dr-l.cr))+" in #"+e.n+", not on the register this month)"); } }));
+  // people in those entries who are no longer on the register for this month
+  site.forEach(e=>e.lines.forEach(l=>{ if(isSal(l)&&l.party&&!seen.has(l.party)){ seen.add(l.party); dropped.push(l.party+" ("+fmt(r2(l.dr-l.cr))+" in #"+e.n+", not on the register this month)"); } }));
   const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
   if(skipped.length) zone.appendChild(el("p","meta","Skipped (no salary set or 0 days worked): "+esc(skipped.join(", "))+"."));
-  // what a run would do now, compared with what the site's entries hold
-  const groups=rows=>{ const by={}; rows.forEach(r=>{ if(r.salary>0.004) (by[r.company]=by[r.company]||[]).push(r); }); return by; };
-  const diff=byCo=>{ const cos=[...new Set([...Object.keys(byCo),...Object.keys(carry),...site.map(entryCo)])]; const upd=[],add=[],del=[]; let changed=false;
-    cos.forEach(co=>{ const ex=site.filter(e=>entryCo(e)===co); const want=(byCo[co]?salaryLinesOf(c,mo,co,byCo[co]):[]).concat(carry[co]||[]);
-      if(ex.length&&want.length){ upd.push({e:ex[0],co,lines:want}); if(!sameLines(want,ex[0].lines)) changed=true; ex.slice(1).forEach(e=>del.push(e)); }
-      else if(want.length){ add.push({co,lines:want}); changed=true; }
-      else ex.forEach(e=>del.push(e)); });
-    if(del.length) changed=true; return {upd,add,del,changed}; };
-  const stale=siteNos.length?diff(groups(plan)).changed:false;
+  // what a run would do now: each person's lines go to the entry that holds their salary today (same company), else to the site's own entry for that company, else to a new entry
+  const mainFor=co=>site.find(e=>recNos.includes(+e.n)&&entryCo(e)===co);
+  const diff=rows=>{ const target={}, fresh={}, byP={};
+    rows.forEach(r=>{ if(r.salary>0.004){ const k=r.p.name; byP[k]=byP[k]||{}; (byP[k][r.company]=byP[k][r.company]||[]).push(r); } });
+    Object.entries(byP).forEach(([name,cos])=>{ const h=holder(name); Object.entries(cos).forEach(([co,rs])=>{ const lines=salaryLinesOf(c,mo,co,rs); const e=(h&&entryCo(h)===co)?h:mainFor(co); if(e) (target[+e.n]=target[+e.n]||[]).push(...lines); else (fresh[co]=fresh[co]||[]).push(...lines); }); });
+    Object.entries(carry).forEach(([n,lines])=>{ (target[n]=target[n]||[]).push(...lines); });
+    const upd=site.filter(e=>target[+e.n]).map(e=>({e,co:entryCo(e),lines:target[+e.n]}));
+    const del=site.filter(e=>!target[+e.n]);
+    const add=Object.entries(fresh).map(([co,lines])=>({co,lines}));
+    return {upd,add,del,changed:upd.some(x=>!sameLines(x.lines,x.e.lines))||del.length>0||add.length>0}; };
+  const stale=siteNos.length?diff(plan).changed:false;
   const acts=el("div","actions");
   if(siteNos.length){
-    acts.appendChild(el("span","meta",stale?"Booked in "+siteRef+" — the register now works out differently (days worked, salaries, treatment or companies changed).":"Booked in "+siteRef+" — matches today's figures."));
+    acts.appendChild(el("span","meta",stale?"Booked in "+siteRef+" — the register now works out differently"+(changes.length?": "+esc(changes.join("; ")):" (advances, treatment or companies changed)")+".":"Booked in "+siteRef+" — matches today's figures."));
     if(dropped.length) acts.appendChild(el("span","meta","A re-run drops: "+esc(dropped.join("; "))+"."));
   }
   if(anyToRun||siteNos.length){
     const label=siteNos.length?"Re-run — update "+(siteNos.length>1?"entries ":"entry ")+siteRef:"Run salaries for "+monthName(mo);
     const b=el("button",siteNos.length&&!stale?"btn2":"btn",label); acts.appendChild(b);
-    b.onclick=async()=>{ const todo=plan.filter(r=>r.salary>0.004); const byCo=groups(todo);
-      const d=siteNos.length?diff(byCo):{upd:[],add:Object.keys(byCo).map(co=>({co,lines:salaryLinesOf(c,mo,co,byCo[co])})),del:[],changed:true};
+    b.onclick=async()=>{ const todo=plan.filter(r=>r.salary>0.004);
+      const d=diff(todo);
       if(!d.upd.length&&!d.add.length&&!d.del.length){ toast("Nothing to book."); return; }
       const tot=todo.reduce((a,r)=>a+r.salary,0); const people=new Set(todo.map(r=>r.p.name)).size;
       const capTot=todo.filter(r=>r.treat==="capital").reduce((a,r)=>a+r.salary,0);
@@ -1239,11 +1247,12 @@ function secSalaries(zone,c,entries,mo){
       else q="Book "+people+" salaries for "+monthName(mo)+" (total "+fmt(tot)+", dated "+end+")? Expensed salaries go to "+expA+(capTot>0.004?", capitalised ones ("+fmt(capTot)+") to "+capA+" App Development":"")+"; advances cleared from 1100, the rest accrues to 2000 [unpaid].";
       if(!confirm(q)) return;
       b.disabled=true; b.textContent="Posting…";
-      try{ const nos=[], did=[];
-        for(const x of d.upd){ await updateEntry(COSCOPE[x.co],+x.e.n,{date:end,memo:"Salaries "+monthName(mo)+" ("+x.co+") (re-run "+today()+")",lines:x.lines}); nos.push(+x.e.n); did.push("updated #"+x.e.n); }
+      try{ const nos=[], adopted=[], did=[];
+        const memoFor=x=>{ const ps=[...new Set(x.lines.filter(isSal).map(l=>l.party))]; return (ps.length===1?ps[0]+" — "+monthName(mo)+" salary":"Salaries "+monthName(mo)+" ("+x.co+")")+" (re-run "+today()+")"; };
+        for(const x of d.upd){ await updateEntry(COSCOPE[x.co],+x.e.n,{date:end,memo:memoFor(x),lines:x.lines}); (recNos.includes(+x.e.n)?nos:adopted).push(+x.e.n); did.push("updated #"+x.e.n); }
         for(const x of d.add){ const n=await postEntry({date:end,memo:"Salaries "+monthName(mo)+" ("+x.co+")",lines:x.lines}); nos.push(n); did.push("booked #"+n); }
         for(const x of d.del){ await deleteEntry(COSCOPE[entryCo(x)],+x.n); did.push("deleted #"+x.n); }
-        const rec2=(c.runs[mo]=c.runs[mo]||{}); const rs=rec2.salaries={emps:{},entries:nos,at:nowIso(),runs:((rec&&rec.runs)||0)+1};
+        const rec2=(c.runs[mo]=c.runs[mo]||{}); const rs=rec2.salaries={emps:{},entries:nos,adopted,at:nowIso(),runs:((rec&&rec.runs)||0)+1};
         todo.forEach(r=>{ const e=rs.emps[r.p.name]=rs.emps[r.p.name]||{company:"",salary:0,advance:0,segments:[]};
           e.segments.push({from:r.g.from,to:r.g.to,days:r.g.days,worked:r.g.worked!=null?r.g.worked:r.g.days,company:r.company,center:r.g.a.center,treat:r.treat,amount:r.salary,advance:r.advance}); e.company=[...new Set(e.segments.map(s=>s.company))].join("/"); e.salary=r2(e.salary+r.salary); e.advance=r2(e.advance+r.advance); });
         try{ await saveClosing("Closing: salaries "+mo+(siteNos.length?" (re-run)":"")); }catch(e){}
@@ -1251,7 +1260,7 @@ function secSalaries(zone,c,entries,mo){
       catch(e){ toast("Not posted: "+e.message,8000); b.disabled=false; b.textContent=label; } };
   } else acts.appendChild(el("span","meta","Everyone on payroll is booked for this month. Tick Paid as you pay them (each tick posts Dr 2000 / Cr 1000 Cash)."));
   zone.appendChild(acts);
-  zone.appendChild(el("p","meta","Run it as often as you like — a re-run rewrites the same entries with the register's latest figures (days worked, salary or company changes, capitalised/expensed) under the same numbers. Salaries booked by hand are left alone."));
+  zone.appendChild(el("p","meta","Run it as often as you like — a re-run rewrites the month's salary entries in place under the same numbers (the site's own run and salary entries booked by hand) with the register's latest figures: days worked, salary or company changes, capitalised/expensed. Salaries pro-rate by calendar days (salary × days worked ÷ days in the month); type a different amount in the Salary box before running if you want a specific figure. Payments already made are never touched."));
 }
 
 async function updateEntry(sc,n,patch){   // rewrite an existing entry in place (same number) — used by re-runnable closing items
