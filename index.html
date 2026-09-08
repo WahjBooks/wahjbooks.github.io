@@ -1044,13 +1044,17 @@ function empStatus(p){ const t=today();
   if(p.end&&p.end<t) return {key:"ended",label:"Ended "+p.end};
   if(p.start&&p.start>t) return {key:"starts",label:"Starts "+p.start};
   return {key:"current",label:"Current"+(p.end?" · ends "+p.end:"")}; }
-function empSegments(p,mo){   // the month split by start/end and by assignment changes; amount = salary × days / days in month
-  const m1=mo+"-01", mE=monthEnd(mo), D=daysBetween(m1,mE);
+const DAY_BASIS=30;   // salaries are on a 30-day month: a full month = 30 days whatever the calendar says; a partial month counts the calendar days on payroll, never more than 30
+function empSegments(p,mo){   // the month split by start/end and by assignment changes; amount = salary × days / 30
+  const m1=mo+"-01", mE=monthEnd(mo), D=DAY_BASIS;
   const s=p.start&&p.start>m1?p.start:m1, e=p.end&&p.end<mE?p.end:mE; if(s>e) return [];
+  const whole=s===m1&&e===mE;
   const as=p.assignments, segs=[];
   as.forEach((a,i)=>{ const af=a.from||"0000-01-01", at=i+1<as.length?dayBefore(as[i+1].from):"9999-12-31";
-    const f=af>s?af:s, t=at<e?at:e; if(f>t) return; const days=daysBetween(f,t); segs.push({from:f,to:t,days,D,a,full:days===D,amount:r2((+a.salary||0)*days/D)}); });
-  return segs;
+    const f=af>s?af:s, t=at<e?at:e; if(f>t) return; segs.push({from:f,to:t,days:daysBetween(f,t),D,a}); });
+  let cum=0; segs.forEach(g=>{ g.days=Math.max(0,Math.min(g.days,D-cum)); cum+=g.days; });   // the 31st never counts
+  if(whole&&segs.length&&cum<D) segs[segs.length-1].days+=D-cum;                             // February still pays a full 30
+  return segs.filter(g=>g.days>0).map(g=>Object.assign(g,{full:whole&&segs.length===1,amount:r2((+g.a.salary||0)*g.days/D)}));
 }
 
 /* ---- Employees tab ---- */
@@ -1059,11 +1063,10 @@ function viewEmployees(m){
   m.appendChild(el("p","meta","Each person has a start date, an end date and a company / cost center / salary / treatment that apply <b>from a given date</b>. Treatment: <b>Expensed</b> books the salary to 5100; <b>Capitalised</b> books it to App Development (1710) instead of the P&L. To move someone or change their pay from a date, click <b>Change from…</b> — the earlier setting stays on record and the Closing tab splits any month that straddles the change by days (e.g. a move on 15 Aug books 14/31 to the old company and 17/31 to the new one). Editing the fields directly changes the current setting itself; the past is never rebooked — months already run stay as booked."));
   const st=closeMonth(); const mo=st.month;
   const f=el("div","filters"); f.appendChild(el("span","flbl","Month:")); const mi=el("input"); mi.type="month"; mi.value=mo; mi.max=thisMonth(); mi.onchange=()=>{ st.month=mi.value; render(); }; f.appendChild(mi);
-  f.appendChild(el("span","meta","The <b>Days worked</b> column is for this month (the same month the Closing tab runs). Default = every calendar day the person is on payroll; type a smaller number for unpaid leave and the salary run pays that share.")); m.appendChild(f);
+  f.appendChild(el("span","meta","The <b>Days worked</b> column is for this month (the same month the Closing tab runs). Salaries are on a <b>30-day basis</b>: a full month is 30 days whatever the calendar says; a month that starts or ends part-way counts the days on payroll (never more than 30). Type a smaller number for unpaid leave and the salary run pays that share (salary × days ÷ 30).")); m.appendChild(f);
   const zone=el("div"); m.appendChild(zone);
   Promise.all([loadClosing(),ledgerAll()]).then(([c,entries])=>{
     zone.innerHTML="";
-    const D=daysBetween(mo+"-01",monthEnd(mo));
     const hdr='<tr><th>Name</th><th>Start</th><th>End</th><th>Company</th><th>Cost center</th><th class="num">Monthly salary</th><th>Treatment</th><th class="num">Days worked<br><span class="meta">'+esc(monthName(mo))+'</span></th><th>Effective from</th><th>Status</th><th>Note</th><th></th></tr>';
     const t=el("table","admtbl emps"); t.innerHTML=hdr;
     const centers=LISTS["Cost/Profit Centers"]||[];
@@ -1076,7 +1079,7 @@ function viewEmployees(m){
       const sa=el("input","amt mono"); sa.type="number"; sa.step="0.01"; sa.min="0"; sa.value=cur.salary||0; sa.style.width="100px"; sa.oninput=()=>{ cur.salary=r2(sa.value); p.salary=cur.salary; };
       const tsel=treatSelect(cur.treat,v=>{ cur.treat=v; });
       const dw=daysWorked(CLOSING,p,mo); const tdd=el("td","num nowrap");
-      if(dw.elig>0){ const di=el("input","amt mono"); di.type="number"; di.step="0.5"; di.min="0"; di.max=dw.elig; di.value=dw.days; di.style.width="64px"; di.title="Days on payroll this month: "+dw.elig+" of "+D;
+      if(dw.elig>0){ const di=el("input","amt mono"); di.type="number"; di.step="0.5"; di.min="0"; di.max=dw.elig; di.value=dw.days; di.style.width="64px"; di.title="Days on payroll this month (30-day basis): "+dw.elig+" of "+DAY_BASIS;
         const dn=el("input"); dn.placeholder="reason"; dn.value=dw.note; dn.style.width="96px"; dn.style.marginLeft="4px"; dn.style.fontSize="12px";
         const upd=()=>{ setDaysWorked(CLOSING,p,mo,di.value,dn.value.trim()); di.classList.toggle("changed",daysWorked(CLOSING,p,mo).override); }; di.onchange=upd; dn.onchange=upd; if(dw.override) di.classList.add("changed");
         tdd.appendChild(di); tdd.append(" of "+dw.elig); tdd.appendChild(dn); }
@@ -1116,7 +1119,7 @@ function viewEmployees(m){
     const before=zone.querySelector(".ended");
     if(CLOSING.unsaved) zone.insertBefore(el("p","meta","This register was pre-filled from the salary entries in the books (paid in one of the last two payroll months = current; start = first salary month; end = last salary month for the others). Check it and click Save register."),before);
     const tot=CLOSING.employees.filter(p=>p.name&&empStatus(p).key==="current").reduce((a,p)=>a+(+empCurrent(p).salary||0),0);
-    zone.insertBefore(el("p","meta","Monthly payroll of current people: "+fmt(tot)+". Dates are inclusive; a month that starts, ends or changes mid-way is paid pro rata by calendar days (you can still overtype any amount on the run)."),before);
+    zone.insertBefore(el("p","meta","Monthly payroll of current people: "+fmt(tot)+". Dates are inclusive; a month that starts, ends or changes mid-way is paid pro rata on a 30-day basis — salary × days ÷ 30 (you can still overtype any amount on the run)."),before);
     // monthly history per person
     const hs=el("div"); hs.className="history"; zone.appendChild(hs);
     hs.appendChild(el("h2","sec","Monthly history"));
@@ -1260,7 +1263,7 @@ function secSalaries(zone,c,entries,mo){
       catch(e){ toast("Not posted: "+e.message,8000); b.disabled=false; b.textContent=label; } };
   } else acts.appendChild(el("span","meta","Everyone on payroll is booked for this month. Tick Paid as you pay them (each tick posts Dr 2000 / Cr 1000 Cash)."));
   zone.appendChild(acts);
-  zone.appendChild(el("p","meta","Run it as often as you like — a re-run rewrites the month's salary entries in place under the same numbers (the site's own run and salary entries booked by hand) with the register's latest figures: days worked, salary or company changes, capitalised/expensed. Salaries pro-rate by calendar days (salary × days worked ÷ days in the month); type a different amount in the Salary box before running if you want a specific figure. Payments already made are never touched."));
+  zone.appendChild(el("p","meta","Run it as often as you like — a re-run rewrites the month's salary entries in place under the same numbers (the site's own run and salary entries booked by hand) with the register's latest figures: days worked, salary or company changes, capitalised/expensed. Salaries are on a 30-day basis (salary × days worked ÷ 30; a full month is 30 days even when the calendar has 31); type a different amount in the Salary box before running if you want a specific figure. Payments already made are never touched."));
 }
 
 async function updateEntry(sc,n,patch){   // rewrite an existing entry in place (same number) — used by re-runnable closing items
