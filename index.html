@@ -180,6 +180,10 @@ table.emps .btn3{padding:3px 6px;font-size:12px;white-space:nowrap}
 table.emps input.changed{border-color:var(--vy);box-shadow:0 0 0 2px rgba(80,80,200,.12)}
 table.emps{min-width:1720px}
 .mono.warn{color:#b45309;font-weight:600}
+table.gl tr.tbg td{font-weight:700;background:var(--surface2);border-top:2px solid var(--line2)}
+table.gl td.i1{padding-left:28px}
+table.gl td.i2{padding-left:48px;color:var(--muted)}
+table.gl tr.tbp td{font-size:12px}
 </style>
 </head>
 <body>
@@ -412,6 +416,16 @@ function periodCols(st){
 const nz=a=>a.some(v=>Math.abs(v)>=0.005);
 const addv=(a,b)=>a.map((v,i)=>v+b[i]);
 const subv=(a,b)=>a.map((v,i)=>v-b[i]);
+/* report settings remembered per browser (wahj.reports): the period is shared by P&L, Cash Flow, Trial Balance and GL; level/view per report; Balance Sheet "as at" follows the last "to" date */
+let REP={}; try{ REP=JSON.parse(localStorage.getItem("wahj.reports")||"{}")||{}; }catch(e){ REP={}; }
+function repSave(){ try{ localStorage.setItem("wahj.reports",JSON.stringify(REP)); }catch(e){} }
+function repState(key,defaults){
+  const st=REP[key]=REP[key]||{}; Object.keys(defaults).forEach(k=>{ if(st[k]===undefined) st[k]=defaults[k]; });
+  if(defaults.from!==undefined){ if(REP.from) st.from=REP.from; if(REP.to) st.to=REP.to; }
+  if(defaults.asOf!==undefined&&REP.asOf) st.asOf=REP.asOf;
+  return st;
+}
+function repChange(st,ch){ Object.assign(st,ch); if(ch.from!==undefined) REP.from=ch.from; if(ch.to!==undefined){ REP.to=ch.to; REP.asOf=ch.to; } if(ch.asOf!==undefined) REP.asOf=ch.asOf; repSave(); render(); }
 function optRow(m,st,onchange,views){
   const f=el("div","filters");
   if(st.level!==undefined){
@@ -471,10 +485,10 @@ function plGrid(level,cols){
 }
 const PLVIEWS=[["total","Total — one column"],["monthly","By month"],["cumulative","By month, cumulative (YTD)"]];
 function viewPL(m){
-  const st=viewPL.st=viewPL.st||{level:3,view:"total",from:"2024-01-01",to:lastDate()};
+  const st=repState("pl",{level:3,view:"total",from:"2024-01-01",to:lastDate()});
   const cols=periodCols(st);
   m.appendChild(el("div","xlhead","PROFIT & LOSS — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]+(st.view==="cumulative"?"   ·   cumulative from "+st.from:st.view==="monthly"?"   ·   month by month":"")));
-  optRow(m,st,ch=>{Object.assign(st,ch);render();},PLVIEWS);
+  optRow(m,st,ch=>repChange(st,ch),PLVIEWS);
   m.appendChild(xlGrid(plGrid(st.level,cols),cols));
 }
 function bsGrid(level,cols){
@@ -513,10 +527,10 @@ function bsGrid(level,cols){
 }
 const BSVIEWS=[["asat","As at date — one column"],["monthend","Month-end balances, by month"]];
 function viewBS(m){
-  const st=viewBS.st=viewBS.st||{level:3,view:"asat",asOf:lastDate()};
+  const st=repState("bs",{level:3,view:"asat",asOf:lastDate()});
   const cols=st.view==="asat"?[{label:"As at "+st.asOf,asOf:st.asOf}]:months().filter(k=>k<=st.asOf.slice(0,7)).map(k=>({label:mlabel(k),asOf:monthEnd(k)<st.asOf?monthEnd(k):st.asOf}));
   m.appendChild(el("div","xlhead","BALANCE SHEET — AS AT "+st.asOf+"   Level "+st.level+"   ·   "+scopeLabel[scope]+(st.view==="monthend"?"   ·   month-end balances":"")));
-  optRow(m,st,ch=>{Object.assign(st,ch);render();},BSVIEWS);
+  optRow(m,st,ch=>repChange(st,ch),BSVIEWS);
   m.appendChild(xlGrid(bsGrid(st.level,cols),cols));
 }
 function cfGrid(level,cols){
@@ -537,30 +551,36 @@ function cfGrid(level,cols){
   return rows;
 }
 function viewCF(m){
-  const st=viewCF.st=viewCF.st||{level:1,view:"total",from:"2024-01-01",to:lastDate()};
+  const st=repState("cf",{level:1,view:"total",from:"2024-01-01",to:lastDate()});
   const cols=periodCols(st);
   m.appendChild(el("div","xlhead","CASH FLOW — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]+"   (classes from the CoA ‘Cash flow’ column)"));
-  optRow(m,st,ch=>{Object.assign(st,ch);render();},PLVIEWS);
+  optRow(m,st,ch=>repChange(st,ch),PLVIEWS);
   m.appendChild(xlGrid(cfGrid(st.level,cols),cols));
 }
 function viewTB(m){
-  const st=viewTB.st=viewTB.st||{from:"2024-01-01",to:lastDate()};
-  m.appendChild(el("div","xlhead","TRIAL BALANCE — "+st.from+" to "+st.to+"   ·   "+scopeLabel[scope]));
-  optRow(m,st,ch=>{Object.assign(st,ch);render();});
-  const acc={};
-  allLines().forEach(({e,l})=>{ const a=acc[l.code]=acc[l.code]||{beg:0,d:0,c:0};
-    if(e.date<st.from) a.beg+=(+l.dr)-(+l.cr);
-    else if(e.date<=st.to){ a.d+=+l.dr; a.c+=+l.cr; } });
+  const st=repState("tb",{level:3,from:"2024-01-01",to:lastDate()});
+  m.appendChild(el("div","xlhead","TRIAL BALANCE — "+st.from+" to "+st.to+"   Level "+st.level+"   ·   "+scopeLabel[scope]));
+  optRow(m,st,ch=>repChange(st,ch));
+  const acc={}, par={};
+  const add=(o,k,e,l)=>{ const a=o[k]=o[k]||{beg:0,d:0,c:0}; if(e.date<st.from) a.beg+=(+l.dr)-(+l.cr); else if(e.date<=st.to){ a.d+=+l.dr; a.c+=+l.cr; } };
+  allLines().forEach(({e,l})=>{ add(acc,l.code,e,l); if(st.level>=10) add(par,l.code+"\u0000"+(l.party||"(unassigned)"),e,l); });
+  const live=a=>Math.abs(a.beg)>=0.005||Math.abs(a.d)>=0.005||Math.abs(a.c)>=0.005;
+  const cells=a=>'<td class="num">'+fmt(a.beg)+'</td><td class="num">'+fmt(a.d)+'</td><td class="num">'+fmt(a.c)+'</td><td class="num">'+fmt(a.beg+a.d-a.c)+'</td>';
+  const sum=(t,a)=>{ t.beg+=a.beg; t.d+=a.d; t.c+=a.c; };
+  const grp=c=>(ACC[c]||{}).group||(c==="IC"?"Intercompany":"Other");
+  const order=[]; COA.forEach(x=>{ const g=x[4]||x[2]; if(!order.includes(g)) order.push(g); }); Object.keys(acc).forEach(c=>{ if(!order.includes(grp(c))) order.push(grp(c)); });
   const w=el("div","tablewrap xlwrap");
   let h='<table class="gl" style="min-width:640px"><thead><tr><th>Code</th><th>Account</th><th class="num">Beginning</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Ending</th></tr></thead><tbody>';
-  let TB=0,TD=0,TC=0,TE=0;
-  Object.keys(acc).sort().forEach(c=>{ const a=acc[c],end=a.beg+a.d-a.c;
-    if(Math.abs(a.beg)<0.005&&Math.abs(a.d)<0.005&&Math.abs(a.c)<0.005) return;
-    TB+=a.beg;TD+=a.d;TC+=a.c;TE+=end;
-    h+='<tr><td class="mono">'+esc(c)+'</td><td>'+esc((ACC[c]||{}).name||c)+'</td><td class="num">'+fmt(a.beg)+'</td><td class="num">'+fmt(a.d)+'</td><td class="num">'+fmt(a.c)+'</td><td class="num">'+fmt(end)+'</td></tr>'; });
-  h+='<tr style="font-weight:700"><td></td><td>TOTAL</td><td class="num">'+fmt(TB)+'</td><td class="num">'+fmt(TD)+'</td><td class="num">'+fmt(TC)+'</td><td class="num">'+fmt(TE)+'</td></tr>';
+  const T={beg:0,d:0,c:0};
+  order.forEach(g=>{ const codes=Object.keys(acc).filter(c=>grp(c)===g&&live(acc[c])).sort(); if(!codes.length) return;
+    const G={beg:0,d:0,c:0}; codes.forEach(c=>sum(G,acc[c])); sum(T,G);
+    h+='<tr class="tbg"><td></td><td>'+esc(g.toUpperCase())+'</td>'+cells(G)+'</tr>';
+    if(st.level>=3) codes.forEach(c=>{ h+='<tr><td class="mono">'+esc(c)+'</td><td class="i1">'+esc((ACC[c]||{}).name||c)+'</td>'+cells(acc[c])+'</tr>';
+      if(st.level>=10){ const ps=Object.keys(par).filter(k=>k.startsWith(c+"\u0000")&&live(par[k])).map(k=>k.slice(c.length+1)).sort();
+        if(!(ps.length===1&&ps[0]==="(unassigned)")) ps.forEach(p=>{ h+='<tr class="tbp"><td></td><td class="i2">'+esc(p)+'</td>'+cells(par[c+"\u0000"+p])+'</tr>'; }); } }); });
+  h+='<tr style="font-weight:700"><td></td><td>TOTAL</td>'+cells(T)+'</tr>';
   w.innerHTML=h+'</tbody></table>'; m.appendChild(w);
-  m.appendChild(el("p","meta","Ending total is 0.00 when the ledger balances"+(scope!=="consolidated"?" (single-company views balance through the IC Intercompany line).":".")));
+  m.appendChild(el("p","meta","Beginning = balance before the From date; Debit/Credit = movements in the period; Ending = Beginning + Debit − Credit (credit balances show negative). Level 1 = sections, 3 = accounts, 10 = every party under each account (customers, vendors, employees…). Ending total is 0.00 when the ledger balances"+(scope!=="consolidated"?" (single-company views balance through the IC Intercompany line).":".")));
 }
 function viewGL(m){
   const f=el("div","filters");
@@ -568,6 +588,7 @@ function viewGL(m){
   const selA=el("select"); selA.innerHTML='<option value="">All accounts</option>'+COA.map(a=>'<option value="'+a[0]+'">'+a[0]+" · "+esc(a[1])+'</option>').join("");
   const q=el("input"); q.placeholder="Search text / party / #"; q.style.flex="1"; q.style.minWidth="140px";
   const exp=el("button","btn2","Export CSV");
+  const gs=REP.gl=REP.gl||{}; if(gs.m&&[...selM.options].some(o=>o.value===gs.m)) selM.value=gs.m; if(gs.a&&[...selA.options].some(o=>o.value===gs.a)) selA.value=gs.a;
   f.append(selM,selA,q,exp); m.appendChild(f);
   const w=el("div","tablewrap xlwrap"); m.appendChild(w);
   const cnt=el("p","meta",""); m.appendChild(cnt);
@@ -596,7 +617,7 @@ function viewGL(m){
     a.download="wahj-gl-"+scope+"-"+today()+".csv"; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),4000);
   };
-  [selM,selA,q].forEach(x=>x.oninput=draw); draw();
+  [selM,selA,q].forEach(x=>x.oninput=()=>{ gs.m=selM.value; gs.a=selA.value; repSave(); draw(); }); draw();
 }
 
 /* ---------- writes to the books (GitHub contents API, sha-checked; retried on conflicts) ---------- */
