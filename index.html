@@ -934,7 +934,7 @@ async function withdrawPending(id){
 function viewPending(m){
   m.appendChild(el("div","xlhead","PENDING — entries waiting for someone with posting rights"));
   m.appendChild(el("p","meta",can("post")
-    ?"Check each entry, then <b>Post</b> it (it gets the next number and goes into the books for everyone) or <b>Reject</b> it with a note. <b>Edit &amp; post</b> opens it in the Entry tab if something needs changing first."
+    ?"Check each entry, then <b>Post</b> it (it gets the next number and goes into the books for everyone) or <b>Reject</b> it with a note. <b>Edit &amp; post</b> opens it in the Entry tab if something needs changing first. <b>Post all</b> posts every balanced entry in the queue in one go."
     :"Entries you send from the Entry tab wait here until someone with posting rights posts them. You can withdraw yours while they are pending."));
   const zone=el("div"); m.appendChild(zone); zone.innerHTML='<div class="skel"></div>';
   loadPending().then(()=>{
@@ -944,6 +944,16 @@ function viewPending(m){
     const open=mine.filter(it=>it.status==="pending").sort((a,b)=>a.at<b.at?-1:1);
     const done=mine.filter(it=>it.status!=="pending").sort((a,b)=>(a.doneAt||"")<(b.doneAt||"")?1:-1).slice(0,30);
     if(!open.length) zone.appendChild(el("p","meta","Nothing waiting."));
+    const okItems=open.filter(it=>Math.abs(r2(it.lines.reduce((a,l)=>a+(+l.dr||0),0))-r2(it.lines.reduce((a,l)=>a+(+l.cr||0),0)))<0.005);
+    if(can("post")&&okItems.length>1){   // post the whole queue in one go (each entry still gets its own number, in queue order)
+      const bar=el("div","actions"); const tot=okItems.reduce((a,it)=>a+it.lines.reduce((x,l)=>x+(+l.dr||0),0),0);
+      const ba=el("button","btn","Post all "+okItems.length+" entries"); const prog=el("span","meta",""); bar.append(ba,prog); zone.appendChild(bar);
+      ba.onclick=async()=>{ if(!confirm("Post all "+okItems.length+" pending entries (total Dr "+fmt(tot)+") into the books, in order? Each gets the next number. Unbalanced entries are skipped.")) return;
+        ba.disabled=true; let done=0; const nos=[];
+        try{ for(const it of okItems){ prog.textContent="Posting "+(done+1)+" of "+okItems.length+"…"; const n=await postEntry({date:it.date,memo:it.memo,lines:it.lines}); nos.push(n); try{ await settlePending(it.id,{status:"posted",n}); }catch(e){} done++; }
+          toast("Posted "+done+" entries — #"+nos[0]+" to #"+nos[nos.length-1]+".",8000); }
+        catch(e){ toast("Stopped after "+done+" — "+e.message,9000); }
+        render(); }; }
     open.forEach(it=>zone.appendChild(pendingCard(it)));
     if(done.length){ zone.appendChild(el("h2","sec","Recently posted or rejected")); const t=el("table","admtbl"); t.innerHTML='<tr><th>When</th><th>Company</th><th>Date</th><th>Memo</th><th class="num">Amount</th><th>From</th><th>Outcome</th></tr>';
       done.forEach(it=>{ const tr=el("tr"); const amt=it.lines.reduce((a,l)=>a+(+l.dr||0),0);
