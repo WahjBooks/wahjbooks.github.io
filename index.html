@@ -180,6 +180,7 @@ table.emps .btn3{padding:3px 6px;font-size:12px;white-space:nowrap}
 table.emps input.changed{border-color:var(--vy);box-shadow:0 0 0 2px rgba(80,80,200,.12)}
 table.emps{min-width:1720px}
 .mono.warn{color:#b45309;font-weight:600}
+table.admtbl tr.tot td{font-weight:700;border-top:2px solid var(--line2)}
 table.gl tr.tbg td{font-weight:700;background:var(--surface2);border-top:2px solid var(--line2)}
 table.gl td.i1{padding-left:28px}
 table.gl td.i2{padding-left:48px;color:var(--muted)}
@@ -397,7 +398,7 @@ function renderScopes(){
 function tabsList(){
   const t=["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance","Lists","CoA"];
   if(can("entries")||can("post")) t.push("Entry","Pending");
-  if(assetsOK()) t.push("Assets");
+  if(assetsOK()) t.push("Assets","Clients");
   if(closingOK()) t.push("Employees","Closing");
   t.push("Guide"); if(isAdmin()) t.push("Admin");
   return t;
@@ -412,7 +413,7 @@ function renderTabs(){
 function render(){
   const m=document.getElementById("main"); m.innerHTML="";
   if(!tabsList().includes(tab)) tab="Dashboard";
-  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Pending":viewPending,"Assets":viewAssets,"Employees":viewEmployees,"Closing":viewClosing,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
+  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Pending":viewPending,"Assets":viewAssets,"Clients":viewClients,"Employees":viewEmployees,"Closing":viewClosing,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
 }
 
 /* ---------- report engine ---------- */
@@ -1033,7 +1034,7 @@ async function loadClosing(){
   const entries=await ledgerAll();
   try{ CLOSING=await openBlob("closing","consolidated"); }catch(e){ CLOSING=null; }
   if(!CLOSING||!CLOSING.employees){ CLOSING=seedClosing(entries); CLOSING.unsaved=true; }
-  CLOSING.runs=CLOSING.runs||{}; CLOSING.months=CLOSING.months||{}; CLOSING.subs=(CLOSING.subs||[]).map(subNorm); CLOSING.employees.forEach(p=>empNorm(p,entries)); CLOSING.settings=Object.assign({usdRate:0.738,shareRate:1/3,shareParties:["Joud","Rami"],shareAccount:"5040",depAccount:"5400",accDepAccount:"1600",salaryAccount:"5100",carryForward:false,disposalGain:"4100",disposalLoss:"5900",cashAccount:"1000",ppeAccount:"1500",capAccount:"1710"},CLOSING.settings||{});
+  CLOSING.runs=CLOSING.runs||{}; CLOSING.months=CLOSING.months||{}; CLOSING.subs=(CLOSING.subs||[]).map(subNorm); CLOSING.clients=(CLOSING.clients||[]).map(cliNorm); CLOSING.employees.forEach(p=>empNorm(p,entries)); CLOSING.settings=Object.assign({usdRate:0.738,shareRate:1/3,shareParties:["Joud","Rami"],shareAccount:"5040",depAccount:"5400",accDepAccount:"1600",salaryAccount:"5100",carryForward:false,disposalGain:"4100",disposalLoss:"5900",cashAccount:"1000",ppeAccount:"1500",capAccount:"1710"},CLOSING.settings||{});
   return CLOSING;
 }
 async function saveClosing(msg){
@@ -1041,7 +1042,7 @@ async function saveClosing(msg){
   CLOSING=await ghUpdate("data/closing.enc","consolidated",o=>{ o=o||{}; const runs=Object.assign({},o.runs||{});
     Object.keys(local.runs||{}).forEach(m=>{ runs[m]=Object.assign({},runs[m]||{},local.runs[m]); });
     const months=Object.assign({},o.months||{}); Object.keys(local.months||{}).forEach(m=>{ months[m]=local.months[m]; });
-    return Object.assign({},o,{v:1,employees:local.employees,assets:local.assets,settings:local.settings,subs:(local.subs||[]).map(subNorm),runs,months}); },msg||"Closing: save");
+    return Object.assign({},o,{v:1,employees:local.employees,assets:local.assets,settings:local.settings,subs:(local.subs||[]).map(subNorm),clients:(local.clients||[]).map(cliNorm),runs,months}); },msg||"Closing: save");
   // keep new employee names in the Employees list for the Entry form
   const missing=CLOSING.employees.map(e=>e.name).filter(n=>n&&!(LISTS["Employees"]||[]).some(x=>x.toLowerCase()===n.toLowerCase()));
   for(const n of missing){ try{ await addListItem("Employees",n); }catch(e){} }
@@ -1349,6 +1350,9 @@ function shareLinesFor(s,b,mo,base,each){   // the entry lines for a month's sha
 function secShare(zone,c,entries,mo){
   const s=c.settings; const end=monthEnd(mo); const parties=s.shareParties;
   zone.appendChild(el("h2","sec","4 · Welltold profit share — "+monthName(mo)));
+  { const rr=(c.runs[mo]||{}).retainers; const due=(c.clients||[]).filter(x=>x.kind==="retainer"&&x.company==="Welltold"&&x.client&&cliActive(x,mo));
+    const open=due.filter(x=>x.amount!=null&&sumCr(cliBooked(entries,x,mo,"Welltold"))<x.amount-0.004);
+    if(due.length) zone.appendChild(el("p","meta",open.length?"<b>Retainers first:</b> "+open.length+" of the "+due.length+" Welltold retainers due in "+monthName(mo)+" are not in the books yet ("+esc(open.map(x=>x.client).join(", "))+") — run them on the Clients tab before the share, so the month's fees are in the net.":"Welltold retainers for "+monthName(mo)+": all "+due.length+" in the books"+(rr&&rr.entries&&rr.entries.length?" (run #"+rr.entries.join(", #")+")":"")+".")); }
   const b=shareBasis(entries,mo); const base=b.net; const each=r2(base*s.shareRate);
   const shareLines=linesWhere(entries,(e,l)=>l.code===s.shareAccount&&parties.includes(l.party)&&e.date.slice(0,7)===mo);
   const booked=parties.map(p=>({p,amt:r2(sumDr(shareLines.filter(({l})=>l.party===p)))}));
@@ -1520,6 +1524,206 @@ function secSubs(zone,c,entries,mo){
   } else ra.appendChild(el("span","meta","Everything due this month is already in the books."));
   zone.appendChild(ra);
   zone.appendChild(el("p","meta","Expected = the register's figure (USD × "+subRate(c)+"); Already booked = what the books already hold for that vendor this month (charges you or Ghassan posted by hand); To book = the difference, which you can overtype for usage-based charges. The run posts one entry per company, Dr the expense account per vendor / Cr cash (card), dated month-end; running it again rewrites the same entry with today's figures."));
+}
+
+/* ---- Clients tab: projects & retainers — register, monthly retainer run (re-runnable), client balances, revenue by month ---- */
+const TAX_RATE=0.16;   // Jordan sales tax on invoices that carry it
+const cliCo=()=>scope==="vyltic"?"Vyltic":"Welltold";   // the tab works per company; Consolidated shows Welltold (the agency)
+function cliNorm(x){ x.client=(x.client||"").trim(); x.company=x.company==="Vyltic"?"Vyltic":"Welltold"; x.kind=x.kind==="project"?"project":"retainer"; x.desc=x.desc||"";
+  x.account=/^\d{4}$/.test(x.account||"")?x.account:(x.kind==="project"?"4530":"4510"); x.amount=x.amount===""||x.amount==null?null:r2(x.amount); x.tax=!!x.tax;
+  x.start=/^\d{4}-\d{2}$/.test(x.start||"")?x.start:""; x.end=/^\d{4}-\d{2}$/.test(x.end||"")?x.end:""; x.date=isDate(x.date)?x.date:""; x.entries=[...new Set((Array.isArray(x.entries)?x.entries:[]).map(Number).filter(n=>n>0))]; x.note=x.note||"";
+  if(!x.id) x.id="c"+Math.random().toString(36).slice(2,8); return x; }
+const cliActive=(x,mo)=>!(x.start&&mo<x.start)&&!(x.end&&mo>x.end);
+const sumCr=xs=>r2(xs.reduce((a,{l})=>a+(+l.cr)-(+l.dr),0));
+const sameParty=(a,b)=>(a||"").trim().toLowerCase()===(b||"").trim().toLowerCase();
+function cliBooked(entries,x,mo,co){ return linesWhere(entries,(e,l)=>l.code===x.account&&l.co===co&&e.date.slice(0,7)===mo&&sameParty(l.party,x.client)); }   // revenue lines for that client / account / month
+function invoiceLines(co,client,account,net,tax,label){   // Dr 1100 client (gross) / Cr revenue (net) / Cr 2200 sales tax
+  const t=tax?r2(net*TAX_RATE):0; const out=[{code:"1100",account:ACC["1100"].name,party:client,desc:label+(t>0.004?" (incl. 16% sales tax)":"")+" [unpaid]",dr:r2(net+t),cr:0,co},
+    {code:account,account:(ACC[account]||{}).name||account,party:client,desc:label,dr:0,cr:r2(net),co}];
+  if(t>0.004) out.push({code:"2200",account:ACC["2200"].name,party:"",desc:"16% sales tax — "+label,dr:0,cr:t,co});
+  return out; }
+function retLinesOf(mo,co,rows){ return rows.flatMap(r=>invoiceLines(co,r.x.client,r.x.account,r.amt,r.x.tax,r.x.client+" — "+monthName(mo)+" retainer"+(r.x.desc?" ("+r.x.desc+")":""))); }
+const revSelect=(val,on)=>{ const ac=el("select"); ac.innerHTML=COA.filter(a=>a[2]==="Revenue"&&a[0]!=="IC").map(a=>'<option value="'+a[0]+'">'+a[0]+" · "+esc(a[1])+'</option>').join(""); ac.value=val; ac.onchange=()=>on(ac.value); ac.style.maxWidth="170px"; return ac; };
+function cliInput(val,w,type,on,mark){ const i=el("input"); if(type) i.type=type; i.value=val==null?"":val; i.style.width=w; if(type==="number"){ i.step="0.01"; i.min="0"; i.className="amt mono"; } i.oninput=()=>{ on(i.value); mark(); }; return i; }
+const cellOf=(x,cls)=>{ const td=el("td",cls||""); td.appendChild(x); return td; };
+function viewClients(m){
+  const co=cliCo(); const st=closeMonth(); const edit=can("post");
+  m.appendChild(el("div","xlhead","CLIENTS — projects & retainers ("+co+")"));
+  m.appendChild(el("p","meta","<b>Retainers</b> are monthly fees: list each client with its fee, from/to months and whether the invoice carries 16% sales tax, then <b>run the month</b> — one entry per month, Dr Accounts Receivable per client / Cr the revenue account (tax to 2200), re-runnable like salaries. <b>Projects</b> are one-off fees: list them and click <b>Book</b> when the invoice goes out (or link an entry already in the books). Collections are booked from the balances table below (Dr Cash / Cr Accounts Receivable)."+(scope==="consolidated"?" Showing Welltold — switch the scope to Vyltic for Vyltic clients.":"")));
+  const f=el("div","filters"); f.appendChild(el("span","flbl","Month:")); const mi=el("input"); mi.type="month"; mi.value=st.month; mi.max=thisMonth(); mi.onchange=()=>{ st.month=mi.value; render(); }; f.appendChild(mi);
+  f.appendChild(el("span","meta","The same month as the Closing tab. Run the retainers before the Welltold profit share, so the month's fees are in its net.")); m.appendChild(f);
+  const zone=el("div"); m.appendChild(zone);
+  Promise.all([loadClosing(),ledgerAll()]).then(([c,entries])=>{ zone.innerHTML=""; c.clients=(c.clients||[]).map(cliNorm);
+    const dl=el("datalist"); dl.id="custlist"; dl.innerHTML=(LISTS["Customers"]||[]).map(p=>'<option value="'+esc(p)+'">').join(""); zone.appendChild(dl);
+    secRetainers(zone,c,entries,st.month,co,edit); secProjects(zone,c,entries,co,edit); secClientBalances(zone,c,entries,co,edit); secRevenueMatrix(zone,c,entries,st.month,co); })
+   .catch(e=>{ zone.innerHTML=""; zone.appendChild(el("p","meta","Couldn’t load: "+esc(e.message))); });
+}
+function cliSaveButton(c,label){ const sv=el("button","btn2","Saved"); sv.disabled=true;
+  sv.onclick=async()=>{ if(c.clients.some(x=>!x.client)){ toast("Every line needs a client name."); return; } sv.disabled=true; sv.textContent="Saving…";
+    try{ await saveClosing("Clients: "+label); c.clientsDirty=false; toast("Saved."); for(const x of c.clients) if(x.client&&!(LISTS["Customers"]||[]).some(v=>sameParty(v,x.client))) await addListItem("Customers",x.client); render(); }
+    catch(e){ toast("Not saved: "+e.message,7000); sv.disabled=false; sv.textContent="Save"; } };
+  return sv; }
+function secRetainers(zone,c,entries,mo,co,edit){
+  zone.appendChild(el("h2","sec","1 · Retainers — "+co));
+  const list=c.clients.filter(x=>x.kind==="retainer"&&x.company===co).sort((a,b)=>(a.end&&!b.end?1:!a.end&&b.end?-1:0)||(a.client.toLowerCase()<b.client.toLowerCase()?-1:1));
+  const t=el("table","admtbl subs"); t.innerHTML='<tr><th>Client</th><th>What for</th><th>Account</th><th class="num">Monthly fee</th><th>+16% tax</th><th>From</th><th>To</th><th>Note</th><th></th></tr>';
+  const sv=cliSaveButton(c,"retainers register"); const mark=()=>{ c.clientsDirty=true; sv.disabled=false; sv.textContent="Save"; };
+  list.forEach(x=>{ const tr=el("tr"); if(x.end&&x.end<mo) tr.className="ended";
+    if(!edit){ tr.innerHTML='<td>'+esc(x.client)+'</td><td class="meta">'+esc(x.desc)+'</td><td class="mono">'+esc(x.account)+'</td><td class="num mono">'+(x.amount!=null?fmt(x.amount):"")+'</td><td>'+(x.tax?"yes":"")+'</td><td class="mono">'+esc(x.start)+'</td><td class="mono">'+esc(x.end)+'</td><td class="meta">'+esc(x.note)+'</td><td></td>'; t.appendChild(tr); return; }
+    const nm=cliInput(x.client,"150px",null,v=>x.client=v.trim(),mark); nm.setAttribute("list","custlist"); tr.appendChild(cellOf(nm));
+    tr.appendChild(cellOf(cliInput(x.desc,"150px",null,v=>x.desc=v,mark)));
+    tr.appendChild(cellOf(revSelect(x.account,v=>{ x.account=v; mark(); })));
+    tr.appendChild(cellOf(cliInput(x.amount,"90px","number",v=>x.amount=v===""?null:r2(v),mark),"num"));
+    const tx=el("input"); tx.type="checkbox"; tx.checked=x.tax; tx.onchange=()=>{ x.tax=tx.checked; mark(); }; tr.appendChild(cellOf(tx));
+    tr.appendChild(cellOf(cliInput(x.start,"120px","month",v=>x.start=v,mark))); tr.appendChild(cellOf(cliInput(x.end,"120px","month",v=>x.end=v,mark)));
+    tr.appendChild(cellOf(cliInput(x.note,"180px",null,v=>x.note=v,mark)));
+    const rm=el("button","btn3 danger","×"); rm.title="Remove from the register (months already booked stay as they are)"; rm.onclick=()=>{ if(!confirm("Remove "+(x.client||"this line")+" from the register?")) return; c.clients=c.clients.filter(y=>y!==x); c.clientsDirty=true; render(); }; tr.appendChild(cellOf(rm));
+    t.appendChild(tr); });
+  if(!list.length){ const tr=el("tr"); tr.innerHTML='<td colspan="9" class="meta">No retainers yet.</td>'; t.appendChild(tr); }
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  const acts=el("div","actions");
+  if(edit){ const ad=el("button","btn2","Add retainer"); ad.onclick=()=>{ c.clients.push(cliNorm({client:"",company:co,kind:"retainer",account:"4510",start:mo})); c.clientsDirty=true; render(); }; acts.appendChild(ad); acts.appendChild(sv); if(c.clientsDirty){ sv.disabled=false; sv.textContent="Save"; } }
+  zone.appendChild(acts);
+  // ----- the month's run
+  const rec=(c.runs[mo]||{}).retainers; const recNos=[...new Set(((rec&&rec.entries)||[]).map(Number))];
+  const shaped=e=>e.date.slice(0,7)===mo&&e.lines.length>1&&e.lines.every(l=>l.code==="1100"||l.code==="2200"||l.code[0]==="4");
+  const entryCo=e=>e.lines[0].co;
+  const site=entries.filter(e=>recNos.includes(+e.n)&&shaped(e)&&entryCo(e)===co).sort((a,b)=>+a.n-+b.n); const siteNos=site.map(e=>+e.n); const siteRef=siteNos.map(n=>"#"+n).join(", ");
+  const base=siteNos.length?entries.filter(e=>!siteNos.includes(+e.n)):entries;
+  const due=list.filter(x=>x.client&&cliActive(x,mo));
+  const h3=el("h3",""); h3.textContent="Retainers due in "+monthName(mo); h3.style.margin="14px 12px 4px"; zone.appendChild(h3);
+  if(!due.length){ zone.appendChild(el("p","meta","No retainer in the register runs this month.")); return; }
+  const rt=el("table","admtbl"); rt.innerHTML='<tr><th>Client</th><th>Account</th><th class="num">Fee</th><th class="num">Already booked</th><th class="num">To book</th><th>Status</th></tr>';
+  const plan=[]; let anyToRun=false; const changes=[];
+  due.forEach(x=>{
+    const exp=x.amount; const bl=cliBooked(base,x,mo,co); const booked=sumCr(bl); const ref=[...new Set(bl.map(({e})=>"#"+e.n))].join(", ");
+    const inSite=cliBooked(site,x,mo,co); const bookedSite=sumCr(inSite);
+    const ri=rec&&rec.items?rec.items[x.id]:null; const riAmt=ri&&typeof ri==="object"?ri.amt:null, riExp=ri&&typeof ri==="object"?ri.exp:null;
+    let def=exp==null?0:Math.max(0,r2(exp-booked));
+    if(riAmt!=null&&exp!=null&&riExp!=null&&Math.abs(riExp-exp)<0.005) def=r2(riAmt);
+    const row={x,amt:def,exp,booked,bookedSite}; plan.push(row);
+    const tr=el("tr"); tr.appendChild(el("td","",esc(x.client)+(x.desc?'<div class="meta">'+esc(x.desc)+'</div>':"")));
+    tr.appendChild(el("td","mono",esc(x.account)));
+    tr.appendChild(el("td","num mono",exp==null?'<span class="meta">not set</span>':fmt(exp)+(x.tax?'<div class="meta">+ tax '+fmt(exp*TAX_RATE)+'</div>':"")));
+    tr.appendChild(el("td","num mono",booked>0.004?fmt(booked)+'<div class="meta">'+esc(ref)+'</div>':"—"));
+    const td=el("td","num");
+    if(exp==null) td.appendChild(el("span","meta","enter a fee"));
+    else if(booked>=exp-0.004&&!(bookedSite>0.004)) td.appendChild(el("span","meta","—"));
+    else { const a=el("input","amt mono"); a.type="number"; a.step="0.01"; a.min="0"; a.value=row.amt; a.style.width="90px"; a.oninput=()=>{ row.amt=r2(a.value); }; td.appendChild(a); if(booked>0.004) td.appendChild(el("div","meta","balance of "+fmt(exp))); anyToRun=true; }
+    tr.appendChild(td);
+    let stat;
+    if(bookedSite>0.004){ const same=Math.abs(bookedSite-row.amt)<0.005; stat='<span class="pill vy">booked '+esc([...new Set(inSite.map(({e})=>"#"+e.n))].join(", "))+'</span> <span class="mono'+(same?"":" warn")+'">'+fmt(bookedSite)+'</span>'+(same?"":'<div class="meta">re-run to update</div>'); if(!same) changes.push(x.client+" "+fmt(bookedSite)+" → "+fmt(row.amt)); }
+    else if(exp==null) stat='<span class="meta">fee not set</span>';
+    else if(booked>=exp-0.004) stat='<span class="pill vy">booked</span>';
+    else if(siteNos.length){ stat='<span class="meta">not in the run yet</span>'; changes.push(x.client+" not booked yet ("+fmt(row.amt)+")"); }
+    else stat='<span class="meta">after run</span>';
+    tr.appendChild(el("td","",stat)); rt.appendChild(tr); });
+  const rw=el("div","tablewrap"); rw.style.padding="8px 12px"; rw.appendChild(rt); zone.appendChild(rw);
+  if(!edit){ zone.appendChild(el("p","meta","Someone with the Posting right runs the month.")); return; }
+  const first=mo+"-01";
+  const todo=rows=>rows.filter(r=>r.amt>0.004&&!(r.booked>=r.exp-0.004&&!(r.bookedSite>0.004)));
+  const diff=rows=>{ const want=retLinesOf(mo,co,todo(rows)); const upd=[],add=[],del=[]; let changed=false;
+    if(site.length&&want.length){ upd.push({e:site[0],co,lines:want}); if(!sameLines(want,site[0].lines)) changed=true; site.slice(1).forEach(e=>del.push(e)); }
+    else if(want.length){ add.push({co,lines:want}); changed=true; } else site.forEach(e=>del.push(e));
+    if(del.length) changed=true; return {upd,add,del,changed}; };
+  const stale=siteNos.length?diff(plan).changed:false;
+  const ra=el("div","actions");
+  if(siteNos.length) ra.appendChild(el("span","meta",stale?"Booked in "+siteRef+" — the register now works out differently"+(changes.length?": "+esc(changes.join("; ")):"")+".":"Booked in "+siteRef+" — matches today's figures."));
+  if(anyToRun||siteNos.length){
+    const label=siteNos.length?"Re-run — update "+(siteNos.length>1?"entries ":"entry ")+siteRef:"Run retainers for "+monthName(mo);
+    const b=el("button",siteNos.length&&!stale?"btn2":"btn",label); ra.appendChild(b);
+    b.onclick=async()=>{ const d=diff(plan); if(!d.upd.length&&!d.add.length&&!d.del.length){ toast("Nothing to book."); return; }
+      const rows=todo(plan); const tot=rows.reduce((a,r)=>a+r.amt,0); const tax=rows.reduce((a,r)=>a+(r.x.tax?r.amt*TAX_RATE:0),0);
+      const q=siteNos.length?"Re-run "+monthName(mo)+" retainers: "+[d.upd.length?"rewrite #"+d.upd[0].e.n:"",d.add.length?"create a new entry":"",d.del.length?"delete "+d.del.map(x=>"#"+x.n).join(", "):""].filter(Boolean).join("; ")+". "+rows.length+" clients, fees "+fmt(tot)+(tax>0.004?" + tax "+fmt(tax):"")+", dated "+first+". The entry keeps its number. Continue?"
+        :"Invoice "+rows.length+" retainer"+(rows.length===1?"":"s")+" for "+monthName(mo)+" ("+co+"): fees "+fmt(tot)+(tax>0.004?" + 16% tax "+fmt(tax):"")+", dated "+first+" — Dr Accounts Receivable per client / Cr revenue"+(tax>0.004?" / Cr 2200 Taxes Payable":"")+"?";
+      if(!confirm(q)) return; b.disabled=true; b.textContent="Posting…";
+      try{ const nos=[], did=[];
+        for(const x of d.upd){ await updateEntry(COSCOPE[x.co],+x.e.n,{date:first,memo:"Retainers "+monthName(mo)+" ("+x.co+") (re-run "+today()+")",lines:x.lines}); nos.push(+x.e.n); did.push("updated #"+x.e.n); }
+        for(const x of d.add){ const n=await postEntry({date:first,memo:"Retainers "+monthName(mo)+" ("+x.co+")",lines:x.lines}); nos.push(n); did.push("booked #"+n); }
+        for(const x of d.del){ await deleteEntry(COSCOPE[entryCo(x)],+x.n); did.push("deleted #"+x.n); }
+        const r2c=(c.runs[mo]=c.runs[mo]||{}); const items=Object.assign({},(rec&&rec.items)||{}); rows.forEach(r=>{ items[r.x.id]={amt:r.amt,exp:r.exp}; });
+        const keep=recNos.filter(n=>!siteNos.includes(n));   // another company's entry for the same month stays on record
+        r2c.retainers={entries:keep.concat(nos),items,at:nowIso(),runs:((rec&&rec.runs)||0)+1};
+        try{ await saveClosing("Clients: retainers "+mo+(siteNos.length?" (re-run)":"")); }catch(e){}
+        toast((siteNos.length?"Retainers re-run — ":"Invoiced retainers — ")+did.join(", ")+".",7000); DATA.consolidated=null; render(); }
+      catch(e){ toast("Not posted: "+e.message,8000); b.disabled=false; b.textContent=label; } };
+  } else ra.appendChild(el("span","meta","Every retainer due this month is already in the books."));
+  zone.appendChild(ra);
+  zone.appendChild(el("p","meta","Fee = the register's figure; Already booked = revenue already in the books for that client and account this month (an invoice posted by hand is recognised and not booked twice); To book = the balance, editable. The run posts one entry dated the 1st of the month and can be re-run — it rewrites the same entry with today's figures."));
+}
+function secProjects(zone,c,entries,co,edit){
+  zone.appendChild(el("h2","sec","2 · Projects — "+co));
+  const list=c.clients.filter(x=>x.kind==="project"&&x.company===co).sort((a,b)=>(a.date||"9999")<(b.date||"9999")?1:-1);
+  const t=el("table","admtbl subs"); t.innerHTML='<tr><th>Client</th><th>Project</th><th>Account</th><th class="num">Fee</th><th>+16% tax</th><th>Date</th><th class="num">Booked</th><th>Note</th><th></th></tr>';
+  const sv=cliSaveButton(c,"projects register"); const mark=()=>{ c.clientsDirty=true; sv.disabled=false; sv.textContent="Save"; };
+  const bookedOf=x=>{ const ls=linesWhere(entries,(e,l)=>x.entries.includes(+e.n)&&l.code===x.account&&l.co===co&&sameParty(l.party,x.client)); return {amt:sumCr(ls),refs:[...new Set(ls.map(({e})=>"#"+e.n))].join(", ")}; };
+  let totFee=0, totBooked=0;
+  list.forEach(x=>{ const tr=el("tr"); const b=bookedOf(x); totFee+=x.amount||0; totBooked+=b.amt;
+    const bcell=b.amt>0.004?'<span class="pill vy">booked '+esc(b.refs)+'</span> <span class="mono">'+fmt(b.amt)+'</span>':(x.entries.length?'<span class="meta">#'+esc(x.entries.join(", #"))+' has no '+esc(x.account)+' line for '+esc(x.client)+'</span>':'<span class="meta">not booked</span>');
+    if(!edit){ tr.innerHTML='<td>'+esc(x.client)+'</td><td class="meta">'+esc(x.desc)+'</td><td class="mono">'+esc(x.account)+'</td><td class="num mono">'+(x.amount!=null?fmt(x.amount):"")+'</td><td>'+(x.tax?"yes":"")+'</td><td class="mono">'+esc(x.date)+'</td><td class="num">'+bcell+'</td><td class="meta">'+esc(x.note)+'</td><td></td>'; t.appendChild(tr); return; }
+    const nm=cliInput(x.client,"150px",null,v=>x.client=v.trim(),mark); nm.setAttribute("list","custlist"); tr.appendChild(cellOf(nm));
+    tr.appendChild(cellOf(cliInput(x.desc,"190px",null,v=>x.desc=v,mark)));
+    tr.appendChild(cellOf(revSelect(x.account,v=>{ x.account=v; mark(); })));
+    tr.appendChild(cellOf(cliInput(x.amount,"90px","number",v=>x.amount=v===""?null:r2(v),mark),"num"));
+    const tx=el("input"); tx.type="checkbox"; tx.checked=x.tax; tx.onchange=()=>{ x.tax=tx.checked; mark(); }; tr.appendChild(cellOf(tx));
+    tr.appendChild(cellOf(cliInput(x.date,"135px","date",v=>x.date=v,mark)));
+    const bk=el("td","num"); bk.innerHTML=bcell;
+    if(!(b.amt>0.004)){ const bb=el("button","btn3","Book"); bb.title="Post the invoice: Dr Accounts Receivable / Cr revenue (tax to 2200) on the project's date"; bb.style.marginLeft="4px";
+      bb.onclick=async()=>{ if(!x.client||!(x.amount>0)){ toast("Client and fee first."); return; } const d=x.date||today(); const tax=x.tax?r2(x.amount*TAX_RATE):0;
+        if(!confirm("Book "+x.client+" — "+(x.desc||"project")+": "+fmt(x.amount)+(tax?" + 16% tax "+fmt(tax):"")+" to "+x.account+", dated "+d+"?")) return; bb.disabled=true;
+        try{ const n=await postEntry({date:d,memo:x.client+" — "+(x.desc||"project"),lines:invoiceLines(co,x.client,x.account,x.amount,x.tax,x.client+" — "+(x.desc||"project"))}); x.entries.push(n); try{ await saveClosing("Clients: project booked #"+n); }catch(e){} toast("Booked — entry #"+n+"."); DATA.consolidated=null; render(); }
+        catch(e){ toast("Not posted: "+e.message,7000); bb.disabled=false; } };
+      bk.appendChild(bb);
+      const ln=el("input"); ln.placeholder="link #"; ln.style.width="60px"; ln.style.marginLeft="4px"; ln.title="Already invoiced by hand? Type the entry number and press Enter";
+      ln.onkeydown=ev=>{ if(ev.key!=="Enter") return; const n=+ln.value; const e=entries.find(y=>+y.n===n); if(!e){ toast("No entry #"+n+"."); return; } if(!e.lines.some(l=>l.code===x.account&&l.co===co&&sameParty(l.party,x.client))){ toast("#"+n+" has no "+x.account+" line for "+x.client+"."); return; } x.entries.push(n); mark(); render(); };
+      bk.appendChild(ln); }
+    else { const un=el("button","btn3","unlink"); un.title="Forget the link (the entry stays in the books)"; un.style.marginLeft="4px"; un.onclick=()=>{ x.entries=[]; mark(); render(); }; bk.appendChild(un); }
+    tr.appendChild(bk);
+    tr.appendChild(cellOf(cliInput(x.note,"160px",null,v=>x.note=v,mark)));
+    const rm=el("button","btn3 danger","×"); rm.title="Remove from the list (nothing in the books changes)"; rm.onclick=()=>{ if(!confirm("Remove "+(x.client||"this line")+" — "+(x.desc||"project")+" from the list?")) return; c.clients=c.clients.filter(y=>y!==x); c.clientsDirty=true; render(); }; tr.appendChild(cellOf(rm));
+    t.appendChild(tr); });
+  if(!list.length){ const tr=el("tr"); tr.innerHTML='<td colspan="9" class="meta">No projects yet.</td>'; t.appendChild(tr); }
+  else { const tr=el("tr"); tr.className="tot"; tr.innerHTML='<td>TOTAL</td><td></td><td></td><td class="num mono">'+fmt(totFee)+'</td><td></td><td></td><td class="num mono">'+fmt(totBooked)+'</td><td></td><td></td>'; t.appendChild(tr); }
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  const acts=el("div","actions");
+  if(edit){ const ad=el("button","btn2","Add project"); ad.onclick=()=>{ c.clients.push(cliNorm({client:"",company:co,kind:"project",account:"4530",date:today()})); c.clientsDirty=true; render(); }; acts.appendChild(ad); acts.appendChild(sv); if(c.clientsDirty){ sv.disabled=false; sv.textContent="Save"; } }
+  zone.appendChild(acts);
+}
+function secClientBalances(zone,c,entries,co,edit){
+  zone.appendChild(el("h2","sec","3 · Client balances — "+co));
+  const people=new Set([...(c.employees||[]).map(p=>p.name),...(LISTS["Employees"]||[]),...(c.settings.shareParties||[])].map(s=>(s||"").toLowerCase()));
+  const rows={};
+  entries.forEach(e=>e.lines.forEach(l=>{ if(l.co!==co||!(l.party||"").trim()||people.has(l.party.trim().toLowerCase())) return; if(l.code!=="1100"&&l.code[0]!=="4") return;
+    const k=l.party.trim(); const r=rows[k]=rows[k]||{party:k,billed:0,invoiced:0,collected:0,last:""};
+    if(l.code[0]==="4") r.billed=r2(r.billed+(+l.cr)-(+l.dr)); else { r.invoiced=r2(r.invoiced+(+l.dr)); r.collected=r2(r.collected+(+l.cr)); if((+l.dr)>0&&e.date>r.last) r.last=e.date; } }));
+  const list=Object.values(rows).filter(r=>Math.abs(r.billed)>0.004||Math.abs(r.invoiced)>0.004||Math.abs(r.collected)>0.004).map(r=>Object.assign(r,{open:r2(r.invoiced-r.collected)})).sort((a,b)=>b.open-a.open||b.billed-a.billed);
+  const t=el("table","admtbl"); t.innerHTML='<tr><th>Client</th><th class="num">Revenue billed</th><th class="num">Invoiced (AR)</th><th class="num">Collected</th><th class="num">Outstanding</th><th>Last invoice</th><th></th></tr>';
+  let tb=0,ti=0,tc=0,to=0;
+  list.forEach(r=>{ tb+=r.billed; ti+=r.invoiced; tc+=r.collected; to+=r.open; const tr=el("tr");
+    tr.innerHTML='<td>'+esc(r.party)+'</td><td class="num mono">'+fmt(r.billed)+'</td><td class="num mono">'+fmt(r.invoiced)+'</td><td class="num mono">'+fmt(r.collected)+'</td><td class="num mono'+(r.open>0.004?" warn":"")+'">'+fmt(r.open)+'</td><td class="mono">'+esc(r.last)+'</td>';
+    const td=el("td","nowrap");
+    if(edit&&r.open>0.004){ const b=el("button","btn3","Collect…"); b.title="Money received from this client: Dr Cash / Cr Accounts Receivable"; b.onclick=async()=>{ const d=prompt("Date received from "+r.party+":",today()); if(!d) return; if(!isDate(d)){ toast("Date must be YYYY-MM-DD."); return; }
+        const amt=+prompt("Amount received from "+r.party+" (outstanding "+fmt(r.open)+"):",String(r.open)); if(!(amt>0)){ toast("Amount must be positive."); return; } b.disabled=true;
+        try{ const n=await postEntry({date:d,memo:r.party+" — collected",lines:[{code:c.settings.cashAccount||"1000",account:ACC[c.settings.cashAccount||"1000"].name,party:"",desc:r.party+" — collected",dr:r2(amt),cr:0,co},{code:"1100",account:ACC["1100"].name,party:r.party,desc:r.party+" — collected",dr:0,cr:r2(amt),co}]}); toast("Collected — entry #"+n+"."); DATA.consolidated=null; render(); }
+        catch(e){ toast("Not posted: "+e.message,7000); b.disabled=false; } }; td.appendChild(b); }
+    tr.appendChild(td); t.appendChild(tr); });
+  if(!list.length){ const tr=el("tr"); tr.innerHTML='<td colspan="7" class="meta">No client activity yet.</td>'; t.appendChild(tr); }
+  else { const tr=el("tr"); tr.className="tot"; tr.innerHTML='<td>TOTAL</td><td class="num mono">'+fmt(tb)+'</td><td class="num mono">'+fmt(ti)+'</td><td class="num mono">'+fmt(tc)+'</td><td class="num mono">'+fmt(to)+'</td><td></td><td></td>'; t.appendChild(tr); }
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  zone.appendChild(el("p","meta","From the books: Revenue billed = the client's lines on revenue accounts (fees before tax); Invoiced = debits to Accounts Receivable under the client's name; Collected = credits to it; Outstanding = the difference. Invoices paid on the spot (cash straight to revenue) show as billed but not invoiced. Employees are left out."));
+}
+function secRevenueMatrix(zone,c,entries,mo,co){
+  zone.appendChild(el("h2","sec","4 · Revenue by client and month — "+co));
+  const ls=linesWhere(entries,(e,l)=>l.co===co&&l.code[0]==="4"&&l.code!=="IC"); if(!ls.length){ zone.appendChild(el("p","meta","No revenue yet.")); return; }
+  const first=ls.map(({e})=>e.date.slice(0,7)).sort()[0]; const lastM=[mo,thisMonth()].sort()[1]; const ms=[]; for(let i=monthIdx(first);i<=monthIdx(lastM);i++) ms.push(idxMonth(i));
+  const ret=new Set(c.clients.filter(x=>x.kind==="retainer"&&x.company===co).map(x=>x.client.toLowerCase()));
+  const by={}; ls.forEach(({e,l})=>{ const k=(l.party||"").trim()||"(no client)"; const r=by[k]=by[k]||{party:k,m:{},tot:0}; const mk=e.date.slice(0,7); r.m[mk]=r2((r.m[mk]||0)+(+l.cr)-(+l.dr)); r.tot=r2(r.tot+(+l.cr)-(+l.dr)); });
+  const rows=Object.values(by).filter(r=>Math.abs(r.tot)>0.004||Object.values(r.m).some(v=>Math.abs(v)>0.004)).sort((a,b)=>(ret.has(b.party.toLowerCase())-ret.has(a.party.toLowerCase()))||b.tot-a.tot);
+  const t=el("table","gl glx"); t.style.minWidth="0"; t.innerHTML='<tr><th>Client</th>'+ms.map(k=>'<th class="num">'+esc(monthName(k).replace(" 20"," ’"))+'</th>').join("")+'<th class="num">Total</th></tr>';
+  const tot={}; rows.forEach(r=>{ const tr=el("tr"); tr.innerHTML='<td>'+esc(r.party)+(ret.has(r.party.toLowerCase())?' <span class="pill vy">retainer</span>':"")+'</td>'+ms.map(k=>{ tot[k]=r2((tot[k]||0)+(r.m[k]||0)); return '<td class="num mono">'+(r.m[k]?fmt(r.m[k]):"")+'</td>'; }).join("")+'<td class="num mono">'+fmt(r.tot)+'</td>'; t.appendChild(tr); });
+  const tr=el("tr"); tr.className="tbg"; tr.innerHTML='<td>TOTAL</td>'+ms.map(k=>'<td class="num mono">'+fmt(tot[k]||0)+'</td>').join("")+'<td class="num mono">'+fmt(rows.reduce((a,r)=>a+r.tot,0))+'</td>'; t.appendChild(tr);
+  const wrap=el("div","tablewrap"); wrap.style.padding="8px 12px"; wrap.appendChild(t); zone.appendChild(wrap);
+  zone.appendChild(el("p","meta","Every revenue line in the books by client and month (before sales tax). Retainer clients first."));
 }
 
 function secDepreciation(zone,c,entries,mo){
@@ -1824,7 +2028,8 @@ function viewGuide(m){
   +'<h3>Rights</h3><p>Everyone sees the reports of their companies. An admin gives each person the rights they need: <strong>CoA</strong> (add accounts), <strong>Lists</strong> (add names), <strong>Entries</strong> (draft entries that wait in <em>Pending</em>) and <strong>Posting</strong> (post entries straight into the books, post or reject what is waiting in Pending, and run the month-end tabs). No rights = view only. <strong>Admin</strong> holds every right and manages people.</p>'
   +'<h3>Posting an entry</h3><p>Entry tab → New entry → pick the company and date, add the lines, make sure it says <em>balanced</em>, then <strong>Post entry</strong> (Posting right) or <strong>Send for posting</strong> (Entries right — it waits in the Pending tab until someone with Posting posts or rejects it). A posted entry gets the next number and shows in the GL and every report at once. Cross-company entries and corrections still go through Ahmed — there is no delete; a mistake is fixed with a reversing entry.</p>'
   +'<h3>Month-end (Employees &amp; Closing tabs)</h3><p>People with the Posting right and both companies see two more tabs. <strong>Employees</strong> is the payroll register: company, cost center, monthly salary, current/stopped — change someone&rsquo;s company there and the next month books to the new company. <strong>Closing</strong> runs the month: salaries (expense to 5100, advances cleared from 1100, the rest owed on 2000; tick <em>Paid</em> per person when you pay and it posts Dr 2000 / Cr 1000), depreciation (straight-line from the asset register, with catch-up for months never booked) and the Welltold profit share (⅓ each of the month’s net — a loss is shared too, netting against what is owed; re-run it whenever the month changes and it rewrites the same entry). Everything it books is a normal entry you can see in the GL.</p>'
-  +'<h3>Software &amp; subscriptions</h3><p>Closing tab, section 2: a register of every recurring charge (vendor, company, account, amount in JOD or USD, monthly or annual with its renewal month, from/to). <strong>Run subscriptions for the month</strong> books what is due and not yet in the books — one entry per company, Dr the expense account per vendor / Cr cash — and can be re-run; charges already posted by hand for that vendor and month are recognised and not booked twice.</p>'+'<h3>Fixed assets</h3><p>The <strong>Assets</strong> tab lists every purchase booked to 1500 with its ready-for-use date, useful life, salvage, depreciation booked and net book value. <em>Sell…</em> or <em>Retire</em> posts the disposal entry immediately (proceeds to cash, accumulated depreciation and cost removed, gain to 4100 or loss to 5900). Old sales booked straight to 1500 can be linked to their asset and the leftover cost written off.</p>'
+  +'<h3>Clients — projects &amp; retainers</h3><p>The <strong>Clients</strong> tab (per company; Consolidated shows Welltold) keeps the agency&rsquo;s revenue register. <em>Retainers</em>: client, monthly fee, revenue account, from/to months, and whether the invoice carries 16% sales tax. <strong>Run retainers for the month</strong> invoices every retainer due and not yet in the books — one entry dated the 1st of the month, Dr Accounts Receivable per client / Cr revenue (tax to 2200 Taxes Payable) — and can be re-run; an invoice already posted by hand for that client and month is recognised and skipped. Run it before the Welltold profit share. <em>Projects</em>: one-off fees with a date; <em>Book</em> posts the invoice, or type an entry number to link one already in the books. <em>Client balances</em> shows billed / invoiced / collected / outstanding per client from the books, with <em>Collect&hellip;</em> to book money received (Dr Cash / Cr Accounts Receivable). The last table is revenue by client and month.</p>'
++'<h3>Software &amp; subscriptions</h3><p>Closing tab, section 2: a register of every recurring charge (vendor, company, account, amount in JOD or USD, monthly or annual with its renewal month, from/to). <strong>Run subscriptions for the month</strong> books what is due and not yet in the books — one entry per company, Dr the expense account per vendor / Cr cash — and can be re-run; charges already posted by hand for that vendor and month are recognised and not booked twice.</p>'+'<h3>Fixed assets</h3><p>The <strong>Assets</strong> tab lists every purchase booked to 1500 with its ready-for-use date, useful life, salvage, depreciation booked and net book value. <em>Sell…</em> or <em>Retire</em> posts the disposal entry immediately (proceeds to cash, accumulated depreciation and cost removed, gain to 4100 or loss to 5900). Old sales booked straight to 1500 can be linked to their asset and the leftover cost written off.</p>'
   +'<h3>Reading the numbers</h3><p>Cash is one pooled bank balance for the whole entity — a company&rsquo;s share can be negative (the other side funds it). Lines marked <code>IC Intercompany</code> only balance cross-company entries inside a single-company view. The Welltold profit share (⅓ Joud + ⅓ Rami of the monthly net) is booked centrally at month-end.</p>'
   +'<h3>Briefing for your AI</h3>';
   const cp=el("button","btn2","Copy AI briefing"); cp.onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(RULES).then(()=>toast("Copied."));};
