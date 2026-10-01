@@ -194,14 +194,105 @@ table.gl.glx td:first-child,table.gl.glx th:first-child{position:sticky;left:0;z
 table.emps td:first-child,table.emps th:first-child{position:sticky;left:0;z-index:2;background:var(--surface)}
 table.subs{min-width:1380px}
 table.subs tr.ended td{opacity:.55}
+
+/* ---- v4.18: chrome (grouped nav, search, theme), dashboard ---- */
+:root{--c1:#4B55C4;--c2:#C2620A;--c3:#0A8A5C;--c4:#B8336A;--c5:#1D82C9;--c6:#8A6D1F;--c7:#6B4FB3;--c8:#7A8580;--warn:#B45309;--good:#0A8A5C}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--c1:#8B93E8;--c2:#E08A2E;--c3:#2DB38F;--c4:#E26A9C;--c5:#4FA5E6;--c6:#C9A24A;--c7:#A68CE6;--c8:#8E9994;--warn:#E0A253;--good:#2DB38F}}
+:root[data-theme="dark"]{--c1:#8B93E8;--c2:#E08A2E;--c3:#2DB38F;--c4:#E26A9C;--c5:#4FA5E6;--c6:#C9A24A;--c7:#A68CE6;--c8:#8E9994;--warn:#E0A253;--good:#2DB38F}
+.mono.warn{color:var(--warn)}
+.hrow.nav{padding-top:0;padding-bottom:6px}
+.tools{margin-left:auto;display:flex;align-items:center;gap:8px;min-width:0}
+.search{position:relative;display:flex;align-items:center}
+.search .sico{position:absolute;left:9px;color:var(--faint);display:flex}
+.search input{padding-left:30px;width:min(360px,44vw);border-radius:99px;font-size:13px}
+.sres{position:absolute;top:calc(100% + 6px);right:0;width:min(560px,92vw);background:var(--surface);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);z-index:40;max-height:60vh;overflow:auto;padding:4px}
+.sr{display:flex;gap:10px;align-items:center;width:100%;text-align:left;padding:8px 10px;border-radius:8px;font-size:13px}
+.sr:hover{background:var(--acc-soft)}
+.sr .d{color:var(--faint);font-size:12px;flex:none}
+.sr .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sr .a{flex:none}
+.sr.more{color:var(--acc);font-weight:600;justify-content:center;gap:6px}
+.iconbtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:9px;color:var(--muted);border:1px solid transparent}
+.iconbtn:hover{background:var(--acc-soft);color:var(--acc)}
+.iconbtn[disabled]{opacity:.4;cursor:default}
+.me{display:flex;align-items:center;gap:8px;padding-left:8px;border-left:1px solid var(--line)}
+.me .who{font-weight:600;font-size:13px}
+.me .meta{font-size:11px}
+nav.tabs{margin-left:0;gap:8px;align-items:center;padding-bottom:2px;flex-wrap:wrap;overflow:visible}
+nav.tabs .grp{display:flex;align-items:center;gap:2px;padding:2px 4px 2px 2px;border-radius:10px;background:var(--surface2)}
+nav.tabs .glbl{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:700;padding:0 6px 0 8px}
+nav.tabs button{padding:6px 10px;display:inline-flex;align-items:center;gap:6px}
+nav.tabs button[aria-selected="true"]{background:var(--surface);box-shadow:var(--shadow)}
+.badge{background:var(--acc);color:var(--acc-ink);border-radius:99px;font-size:10.5px;padding:0 6px;line-height:16px;font-weight:700}
+/* dashboard */
+.dtop{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:4px 0 14px}
+.dtitle .h{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-size:24px;font-weight:700;letter-spacing:-.01em;display:block;line-height:1.15}
+.dctl{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.dctl input[type=month]{padding:5px 8px;font-size:13px}
+.seg{display:inline-flex;background:var(--surface2);border-radius:10px;padding:2px;margin-left:6px}
+.seg button{padding:5px 11px;border-radius:8px;font-size:12.5px;color:var(--muted);font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--acc);font-weight:600;box-shadow:var(--shadow)}
+.kgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px}
+@media(min-width:1000px){.kgrid.k6{grid-template-columns:repeat(3,1fr)}.kgrid.k7,.kgrid.k8{grid-template-columns:repeat(4,1fr)}.kgrid.k5{grid-template-columns:repeat(5,1fr)}}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px 12px;display:flex;flex-direction:column;gap:6px;min-width:0;position:relative}
+.kpi.link{cursor:pointer;transition:transform .12s,box-shadow .12s}
+.kpi.link:hover{transform:translateY(-1px);box-shadow:var(--shadow);border-color:var(--line2)}
+.khead{display:flex;align-items:center;gap:8px}
+.kico{display:inline-flex;color:var(--acc);background:var(--acc-soft);border-radius:8px;padding:5px}
+.help{margin-left:auto;width:18px;height:18px;border-radius:99px;border:1px solid var(--line2);color:var(--faint);font-size:11px;display:inline-flex;align-items:center;justify-content:center;cursor:help}
+.kval{font-size:26px;font-weight:500;letter-spacing:-.01em;line-height:1.1}
+.kval.neg{color:var(--neg)}
+.kspark{height:28px}
+.spark{display:block}
+.ksub{font-size:12px;color:var(--muted);line-height:1.35}
+.delta{font-weight:700;font-size:12px;border-radius:6px;padding:0 5px}
+.delta.up{color:var(--good);background:rgba(10,138,92,.12)}
+.delta.dn{color:var(--neg);background:rgba(180,35,24,.10)}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}
+.chip{font-size:11px;background:var(--chip);border-radius:99px;padding:2px 8px;color:var(--muted);white-space:nowrap}
+.drow{display:grid;grid-template-columns:1.45fr 1fr;gap:12px;margin-top:12px}
+@media(max-width:860px){.drow{grid-template-columns:1fr}.dtitle .h{font-size:20px}}
+.dcard{padding:14px 16px 12px;margin-top:12px}
+.drow .dcard{margin-top:0}
+.chead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.ctitle{font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;font-weight:600;font-size:15px}
+svg .bar{opacity:.55;transition:opacity .12s}
+svg .bar.on{opacity:1}
+svg .bar:hover{opacity:1}
+.donutwrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.dleg{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.dli{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.dli i{width:10px;height:10px;border-radius:3px;flex:none}
+.dli .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hbars{display:flex;flex-direction:column;gap:6px}
+.hb{display:grid;grid-template-columns:minmax(120px,38%) 1fr 84px;gap:10px;align-items:center;font-size:12.5px;padding:2px 4px;border-radius:8px}
+.hb.link{cursor:pointer}
+.hb.link:hover{background:var(--acc-soft)}
+.hb .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb .bar{height:12px;background:var(--surface2);border-radius:6px;overflow:hidden}
+.hb .bar i{display:block;height:100%;border-radius:6px}
+.hb .v{text-align:right}
+.attn{display:flex;flex-direction:column;gap:4px}
+.ai{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--surface2);font-size:13px;text-align:left;width:100%}
+.ai .aic{display:inline-flex;color:var(--warn);flex:none}
+.ai.ok .aic{color:var(--good)}
+.ai .t{flex:1;min-width:0}
+.ai .go{color:var(--acc);font-weight:600;font-size:12px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+button.ai:hover{background:var(--acc-soft)}
+button.recent{width:100%;text-align:left;border-radius:8px}
+button.recent:hover{background:var(--acc-soft)}
+.recent .by{flex:none;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent .pill{flex:none;padding:0 6px}
+.dfoot{margin-top:14px}
+@media(max-width:700px){nav.tabs .grp{flex-wrap:wrap}.search input{width:38vw}.me .who,.me .meta{display:none}.hrow{padding:8px 12px}main{padding:12px 12px 60px}.kval{font-size:22px}}
 </style>
 </head>
 <body>
 <header class="app" id="hdr" hidden><div class="hrow">
   <span class="wordmark"><span class="codot"></span>Wahj Books</span>
   <span class="scopes" id="scopes"></span>
-  <nav class="tabs" id="tabs" role="tablist"></nav>
-</div></header>
+  <div class="tools" id="tools"></div>
+</div><div class="hrow nav"><nav class="tabs" id="tabs" role="tablist"></nav></div></header>
 <main id="main"><div class="skel"></div></main>
 <button id="totop" aria-label="Scroll to top">↑ Top</button>
 
@@ -383,7 +474,8 @@ async function enter(){
   if(!myScopes().includes(scope)) scope=myScopes().sort((a,b)=>ord[b]-ord[a])[0];
   if(!scope){ m.innerHTML='<div class="authbox"><h1><span class="codot"></span>Wahj Books</h1><p>Your account has no company access yet. Ask an admin.</p></div>'; return; }
   await loadScope(scope);
-  renderScopes(); renderTabs(); render();
+  renderScopes(); renderTools(); renderTabs(); render();
+  if(KEYS.maker&&!PENDING) loadPending().then(()=>renderTabs()).catch(()=>{});
 }
 function signOut(){ try{sessionStorage.removeItem("wahj.sess");}catch(e){} location.reload(); }
 
@@ -403,16 +495,10 @@ function tabsList(){
   t.push("Guide"); if(isAdmin()) t.push("Admin");
   return t;
 }
-function renderTabs(){
-  const n=document.getElementById("tabs"); n.innerHTML="";
-  tabsList().forEach(t=>{ const b=el("button","",esc(t));
-    b.setAttribute("role","tab"); b.setAttribute("aria-selected",t===tab?"true":"false");
-    b.onclick=()=>{ tab=t; try{localStorage.setItem("wahj.tab",t);}catch(e){} renderTabs(); render(); };
-    n.appendChild(b); });
-}
 function render(){
   const m=document.getElementById("main"); m.innerHTML="";
   if(!tabsList().includes(tab)) tab="Dashboard";
+  renderTabs();
   ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Pending":viewPending,"Assets":viewAssets,"Clients":viewClients,"Employees":viewEmployees,"Closing":viewClosing,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
 }
 
@@ -620,11 +706,12 @@ function viewGL(m){
   const q=el("input"); q.placeholder="Search text / party / #"; q.style.flex="1"; q.style.minWidth="140px";
   const exp=el("button","btn2","Export CSV");
   const gs=REP.gl=REP.gl||{}; if(gs.m&&[...selM.options].some(o=>o.value===gs.m)) selM.value=gs.m; if(gs.a&&[...selA.options].some(o=>o.value===gs.a)) selA.value=gs.a;
+  if(viewGL.q!=null){ q.value=viewGL.q; viewGL.q=null; }
   f.append(selM,selA,q,exp); m.appendChild(f);
   const w=el("div","tablewrap xlwrap"); m.appendChild(w);
   const cnt=el("p","meta",""); m.appendChild(cnt);
   const rows=()=>{
-    const mv=selM.value,av=selA.value,qv=q.value.trim().toLowerCase(); const out=[];
+    const mv=selM.value,av=selA.value,qv=q.value.trim().toLowerCase().replace(/^#/,""); const out=[];
     entriesArr().forEach(({e})=>e.lines.forEach(l=>{
       if(mv&&(e.date||"").slice(0,7)!==mv) return;
       if(av&&l.code!==av) return;
@@ -757,72 +844,239 @@ function viewCoA(m){
 }
 
 /* ---------- dashboard ---------- */
-function viewDash(m){
-  const by={}; entriesArr().forEach(({e})=>e.lines.forEach(l=>{ by[l.code]=(by[l.code]||0)+(+l.dr)-(+l.cr); }));
-  const now=new Date().toISOString().slice(0,7);
-  let rev=0,exp=0;
-  entriesArr().forEach(({e})=>{ if((e.date||"").slice(0,7)!==now) return;
-    e.lines.forEach(l=>{ if(l.code[0]==="4") rev+=(+l.cr)-(+l.dr); else if(l.code[0]==="5") exp+=(+l.dr)-(+l.cr); }); });
-  const tiles=el("div","tiles");
-  const tile=(a,v,s)=>tiles.appendChild(el("div","tile",'<div class="lbl">'+a+'</div><div class="v mono'+(v<0?" neg":"")+'">'+fmt(v)+'</div>'+(s?'<div class="s">'+s+'</div>':"")));
-  tile(scope==="consolidated"?"Cash (entity)":"Cash — share",by["1000"]||0,scope==="consolidated"?"Etihad + Arab pooled":"bank pool is entity-wide");
-  tile("Receivable",by["1100"]||0,"owed to us");
-  tile("Payable",-(by["2000"]||0),"owed by us");
-  tile("Net · "+now,rev-exp,fmt(rev)+" rev − "+fmt(exp)+" exp");
-  if(scope!=="vyltic"){
-    let wr=0,wd=0,wt=0;
-    entriesArr().forEach(({e})=>{ if((e.date||"").slice(0,7)!==now) return;
-      e.lines.forEach(l=>{ if((l.co||"")!=="Welltold") return;
-        if(l.code[0]==="4") wr+=(+l.cr)-(+l.dr);
-        if(l.code==="5150"||l.code==="5900") wd+=(+l.dr)-(+l.cr);
-        if(l.code==="5100") wt+=(+l.dr)-(+l.cr); }); });
-    const net=wr-wd-wt;
-    tile("Welltold share basis · "+now,net,net>0?"⅓ each ≈ "+fmt(net/3)+" (booked at month-end)":"loss month — no share accrues");
-  }
-  m.appendChild(tiles);
-  const duo=el("div","duo");
-  const c1=el("div","card"); c1.appendChild(el("div","lbl","Monthly net — last 6 months")); c1.appendChild(chart6()); duo.appendChild(c1);
-  const c2=el("div","card"); c2.appendChild(el("div","lbl","Latest entries"));
-  const rec=el("div","recents");
-  entriesArr().sort((a,b)=>a.e.date<b.e.date?1:a.e.date>b.e.date?-1:b.e.n-a.e.n).slice(0,9)
-    .forEach(({e})=>rec.appendChild(el("div","recent",'<span class="d mono">'+esc((e.date||"").slice(5))+'</span><span class="t">#'+e.n+' · '+esc(e.memo||(e.lines[0]||{}).desc||"")+'</span><span class="a">'+fmt(e.lines.reduce((a,l)=>a+(+l.dr),0))+'</span>')));
-  c2.appendChild(rec); duo.appendChild(c2); m.appendChild(duo);
-  if(scope==="vyltic") m.appendChild(el("p","meta","“Cash — share” can be negative: the bank accounts belong to the whole entity; the other side of the pool covers the difference."));
-  const last=entriesArr().reduce((a,{e})=>e.n>a.n?e:a,{n:0});
-  m.appendChild(el("p","meta","Signed in as "+esc(WHO)+" · "+rightsLabel()+(last.n?" · latest entry #"+last.n+" ("+esc(last.date)+")":"")+"."));
+/* ---------- theme (light / dark; follows the device unless chosen) ---------- */
+function applyTheme(t){ if(t==="light"||t==="dark") document.documentElement.setAttribute("data-theme",t); else document.documentElement.removeAttribute("data-theme"); try{ if(t) localStorage.setItem("wahj.theme",t); else localStorage.removeItem("wahj.theme"); }catch(e){} }
+const curTheme=()=>document.documentElement.getAttribute("data-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");
+(function(){ try{ const t=localStorage.getItem("wahj.theme"); if(t) applyTheme(t); }catch(e){} })();
+const ICON={
+  search:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  sun:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+  cash:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>',
+  inbox:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 13l2-8h14l2 8v6H3z"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/></svg>',
+  out:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  down:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
+  trend:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M14 7h7v7"/></svg>',
+  users:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.5a5 5 0 0 1 6 5"/></svg>',
+  alert:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3 2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></svg>',
+  check:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m4 12 5 5L20 6"/></svg>',
+  arrow:'<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  logout:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 4H5v16h5M14 8l5 4-5 4M19 12H9"/></svg>'
+};
+/* ---------- header tools: search across the books, theme, who am I ---------- */
+const TAB_GROUPS=[["Reports",["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance"]],["Work",["Entry","Pending","Clients","Employees","Closing","Assets"]],["Setup",["Lists","CoA","Admin","Guide"]]];
+const pendingCount=()=>{ if(!PENDING||!Array.isArray(PENDING.items)) return 0; const cos=myCompanies().map(s=>scopeLabel[s]); return PENDING.items.filter(it=>it.status==="pending"&&cos.includes(it.co)).length; };
+function renderTools(){
+  const n=document.getElementById("tools"); if(!n) return; n.innerHTML="";
+  const sw=el("div","search"); const si=el("input"); si.type="search"; si.placeholder="Search the books…  memo, party, #"; si.setAttribute("aria-label","Search the books"); si.autocomplete="off";
+  const ic=el("span","sico",ICON.search); const res=el("div","sres"); res.hidden=true; sw.append(ic,si,res); n.appendChild(sw);
+  let tm=null; const close=()=>{ res.hidden=true; res.innerHTML=""; };
+  const run=()=>{ const q=si.value.trim().toLowerCase().replace(/^#/,""); if(q.length<2){ close(); return; }
+    const out=[]; entriesArr().forEach(({e})=>{ const hay=(e.n+" "+(e.memo||"")+" "+e.lines.map(l=>(l.party||"")+" "+(l.desc||"")).join(" ")).toLowerCase(); if(hay.includes(q)) out.push(e); });
+    out.sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:b.n-a.n);
+    res.innerHTML=""; if(!out.length){ res.appendChild(el("div","sr meta","Nothing matches “"+esc(si.value.trim())+"” in "+esc(scopeLabel[scope]||scope)+".")); res.hidden=false; return; }
+    out.slice(0,9).forEach(e=>{ const co=e.lines[0]&&e.lines[0].co; const d=el("button","sr"); d.innerHTML='<span class="pill '+(co==="Vyltic"?"vy":"we")+'">'+esc(co||"")+'</span><span class="mono d">'+esc(e.date)+'</span><span class="t">#'+e.n+' · '+esc(e.memo||(e.lines[0]||{}).desc||"")+'</span><span class="mono a">'+fmt(e.lines.reduce((a,l)=>a+(+l.dr),0))+'</span>';
+      d.onclick=()=>{ openGL("#"+e.n); close(); si.value=""; }; res.appendChild(d); });
+    if(out.length>9){ const more=el("button","sr more","Show all "+out.length+" in the GL "+ICON.arrow); more.onclick=()=>{ openGL(si.value.trim()); close(); }; res.appendChild(more); }
+    res.hidden=false; };
+  si.oninput=()=>{ clearTimeout(tm); tm=setTimeout(run,160); }; si.onkeydown=ev=>{ if(ev.key==="Enter"){ ev.preventDefault(); if(si.value.trim()){ openGL(si.value.trim()); close(); } } if(ev.key==="Escape"){ close(); si.blur(); } };
+  si.onfocus=()=>{ if(si.value.trim().length>=2) run(); }; document.addEventListener("click",ev=>{ if(!sw.contains(ev.target)) close(); });
+  const th=el("button","iconbtn",curTheme()==="dark"?ICON.sun:ICON.moon); th.title=curTheme()==="dark"?"Switch to light mode":"Switch to dark mode"; th.setAttribute("aria-label",th.title);
+  th.onclick=()=>{ applyTheme(curTheme()==="dark"?"light":"dark"); renderTools(); }; n.appendChild(th);
+  const me=el("div","me"); me.innerHTML='<span class="who">'+esc(WHO&&WHO!==MYEMAIL?WHO:(MYEMAIL||"").split("@")[0])+'</span><span class="meta">'+esc(rightsLabel())+'</span>';
+  const so=el("button","iconbtn",ICON.logout); so.title="Sign out"; so.setAttribute("aria-label","Sign out"); so.onclick=signOut; me.appendChild(so); n.appendChild(me);
 }
-function chart6(){
-  const wrap=el("div","chartwrap");
-  const per={};
-  entriesArr().forEach(({e})=>e.lines.forEach(l=>{ const k=(e.date||"").slice(0,7); if(!k) return;
-    per[k]=per[k]||{Vyltic:0,Welltold:0};
-    if(l.code[0]==="4") per[k][l.co]=(per[k][l.co]||0)+(+l.cr)-(+l.dr);
-    else if(l.code[0]==="5") per[k][l.co]=(per[k][l.co]||0)-((+l.dr)-(+l.cr)); }));
-  const keys=Object.keys(per).sort().slice(-6);
-  if(!keys.length){ wrap.textContent="No data yet."; return wrap; }
-  const series=scope==="consolidated"?["Vyltic","Welltold"]:scope==="welltold"?["Welltold"]:["Vyltic"];
-  if(series.length>1) wrap.appendChild(el("div","legend",'<span><i style="background:var(--vy)"></i>Vyltic</span><span><i style="background:var(--we)"></i>Welltold</span>'));
-  const vals=[]; keys.forEach(k=>series.forEach(s=>vals.push(per[k][s]||0)));
-  const max=Math.max(1,...vals.map(Math.abs));
-  const W=460,H=170,P=28,zero=H-34-((H-52)*0.5);
-  const bw=series.length>1?16:26, gw=(W-P-8)/keys.length;
-  let s='<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Monthly net">';
-  s+='<line x1="'+P+'" y1="'+zero+'" x2="'+(W-4)+'" y2="'+zero+'" stroke="var(--line2)" stroke-width="1"/>';
-  keys.forEach((k,i)=>{ series.forEach((sr,j)=>{ const v=per[k][sr]||0,h=Math.abs(v)/max*(H-52)/2;
-      const x=P+8+i*gw+j*(bw+2)+(gw-series.length*(bw+2))/2, y=v>=0?zero-h:zero;
-      const col=v<0?"var(--neg)":(series.length>1?(sr==="Vyltic"?"var(--vy)":"var(--we)"):(scope==="welltold"?"var(--we)":"var(--vy)"));
-      s+='<rect data-t="'+esc(sr+" "+k+": "+fmt(v))+'" x="'+x+'" y="'+y+'" width="'+bw+'" height="'+Math.max(h,1)+'" rx="3" fill="'+col+'"/>'; });
-    s+='<text x="'+(P+8+i*gw+gw/2-1)+'" y="'+(H-8)+'" font-size="10" text-anchor="middle">'+k.slice(2).replace("-","/")+'</text>'; });
-  s+='<text x="'+(P-4)+'" y="'+(zero+3)+'" font-size="10" text-anchor="end">0</text></svg>';
-  wrap.innerHTML+=s;
-  wrap.addEventListener("mousemove",ev=>{ const r=ev.target.closest("rect[data-t]"); let t=document.querySelector(".ttip");
-    if(!r){ if(t)t.remove(); return; } if(!t){ t=el("div","ttip"); document.body.appendChild(t); }
-    t.textContent=r.getAttribute("data-t"); t.style.left=(ev.clientX+12)+"px"; t.style.top=(ev.clientY-10)+"px"; });
-  wrap.addEventListener("mouseleave",()=>{const t=document.querySelector(".ttip");if(t)t.remove();});
+const glReset=()=>{ REP.gl=Object.assign(REP.gl||{},{a:"",m:""}); repSave(); };   // a search for one entry / name must not be hidden by a remembered account or month filter
+function openGL(q){ viewGL.q=q; glReset(); tab="GL"; try{localStorage.setItem("wahj.tab",tab);}catch(e){} renderTabs(); render(); }
+function goTab(t,extra){ if(!tabsList().includes(t)) return; if(extra&&extra.month!=null){ closeMonth().month=extra.month; } if(extra&&extra.gl!=null){ viewGL.q=extra.gl; if(extra.gl) glReset(); } tab=t; try{localStorage.setItem("wahj.tab",tab);}catch(e){} renderTabs(); render(); window.scrollTo({top:0,behavior:"smooth"}); }
+function renderTabs(){
+  const n=document.getElementById("tabs"); n.innerHTML=""; const mine=tabsList(); const pc=pendingCount();
+  TAB_GROUPS.forEach(([g,ts])=>{ const have=ts.filter(t=>mine.includes(t)); if(!have.length) return;
+    const grp=el("span","grp"); grp.appendChild(el("span","glbl",g));
+    have.forEach(t=>{ const b=el("button","",esc(t)); b.setAttribute("role","tab"); b.setAttribute("aria-selected",t===tab?"true":"false");
+      if(t==="Pending"&&pc) b.appendChild(el("b","badge",String(pc)));
+      b.onclick=()=>{ tab=t; try{localStorage.setItem("wahj.tab",t);}catch(e){} renderTabs(); render(); }; grp.appendChild(b); });
+    n.appendChild(grp); });
+}
+/* ---------- Dashboard ---------- */
+const DASH={period:"month",month:null};
+const CASH_CODES=()=>COA.filter(a=>a[5]==="Cash"&&a[0][0]==="1").map(a=>a[0]);
+const AP_CODES=["2000","2100","2200","2510"];
+const PAL=["var(--c1)","var(--c2)","var(--c3)","var(--c4)","var(--c5)","var(--c6)","var(--c7)","var(--c8)"];
+const shortMonth=k=>new Date(k+"-15T00:00:00Z").toLocaleString("en",{month:"short",timeZone:"UTC"})+" ’"+k.slice(2,4);
+const pct=(a,b)=>b?Math.round((a-b)/Math.abs(b)*100):null;
+function periodRange(){
+  const ms=months(); const last=ms[ms.length-1]||thisMonth();
+  if(!DASH.month) DASH.month=last; const m=DASH.month, mi=monthIdx(m);
+  if(DASH.period==="3m") return {from:idxMonth(mi-2),to:m,label:monthName(idxMonth(mi-2)).replace(/ \d{4}$/,"")+" – "+monthName(m),pf:idxMonth(mi-5),pt:idxMonth(mi-3),plabel:"the 3 months before"};
+  if(DASH.period==="ytd"){ const f=m.slice(0,4)+"-01", n=mi-monthIdx(f)+1; return {from:f,to:m,label:"Jan – "+monthName(m),pf:idxMonth(monthIdx(f)-n),pt:idxMonth(monthIdx(f)-1),plabel:"the "+n+" months before"}; }
+  if(DASH.period==="all") return {from:"0000-01",to:"9999-12",label:"All time",pf:null,pt:null,plabel:""};
+  return {from:m,to:m,label:monthName(m),pf:idxMonth(mi-1),pt:idxMonth(mi-1),plabel:monthName(idxMonth(mi-1)).replace(/ \d{4}$/,"")};
+}
+function dashModel(){
+  const P=periodRange(); const cash=new Set(CASH_CODES()); const inP=k=>k>=P.from&&k<=P.to, inPrev=k=>P.pf&&k>=P.pf&&k<=P.pt;
+  const M={P,rev:0,cost:0,prev:{rev:0,cost:0},revAcct:{},costAcct:{},revCo:{},costCo:{},byMonth:{},cashEnd:0,cashPrevEnd:0,ar:{},ap:{},apCode:{},arOldest:{},wt:{rev:0,cost:0,share:0,sharePrev:0,net:0,netPrev:0,rev2:0,revClient:{},arClient:{}},entries:[],flags:{unclassified:[]}};
+  const sa=(CLOSING&&CLOSING.settings&&CLOSING.settings.shareAccount)||"5040", shareP=(CLOSING&&CLOSING.settings&&CLOSING.settings.shareParties)||["Joud","Rami"];
+  entriesArr().forEach(({e})=>{ const k=(e.date||"").slice(0,7); if(!k) return; M.entries.push(e);
+    const bm=M.byMonth[k]=M.byMonth[k]||{rev:0,cost:0,revCo:{},costCo:{},cash:0,wtRev:0,wtCost:0};
+    e.lines.forEach(l=>{ const dr=+l.dr||0, cr=+l.cr||0, c=l.code, co=l.co||"";
+      if(/\[(to classify|unconfirmed)\]/i.test((l.desc||"")+" "+(e.memo||""))&&!M.flags.unclassified.includes(e.n)) M.flags.unclassified.push(e.n);
+      if(c[0]==="4"){ const v=cr-dr; bm.rev+=v; bm.revCo[co]=(bm.revCo[co]||0)+v; if(co==="Welltold") bm.wtRev+=v;
+        if(inP(k)){ M.rev+=v; M.revAcct[c]=(M.revAcct[c]||0)+v; M.revCo[co]=(M.revCo[co]||0)+v; if(co==="Welltold"){ M.wt.rev+=v; const p=(l.party||"").trim()||"(no client)"; M.wt.revClient[p]=(M.wt.revClient[p]||0)+v; } } if(inPrev(k)) M.prev.rev+=v; }
+      else if(c[0]==="5"){ const v=dr-cr; bm.cost+=v; bm.costCo[co]=(bm.costCo[co]||0)+v; if(co==="Welltold"&&c!==sa) bm.wtCost+=v;
+        if(inP(k)){ M.cost+=v; M.costAcct[c]=(M.costAcct[c]||0)+v; M.costCo[co]=(M.costCo[co]||0)+v; if(co==="Welltold"){ if(c!==sa) M.wt.cost+=v; else M.wt.share+=v; } } if(inPrev(k)){ M.prev.cost+=v; if(co==="Welltold"&&c===sa) M.wt.sharePrev+=v; } }
+      if(cash.has(c)){ bm.cash+=dr-cr; }
+      if(k<=P.to){ if(c==="1100"&&(l.party||"").trim()){ const p=l.party.trim(); M.ar[p]=r2((M.ar[p]||0)+dr-cr); if(dr>0&&(!M.arOldest[p]||e.date<M.arOldest[p])) M.arOldest[p]=e.date; if(co==="Welltold") M.wt.arClient[p]=r2((M.wt.arClient[p]||0)+dr-cr); }
+        if(AP_CODES.includes(c)){ M.apCode[c]=r2((M.apCode[c]||0)+cr-dr); const p=(l.party||"").trim()||"(no name)"; M.ap[p]=r2((M.ap[p]||0)+cr-dr); } } }); });
+  const ks=Object.keys(M.byMonth).sort(); let run=0; ks.forEach(k=>{ run+=M.byMonth[k].cash; M.byMonth[k].cashEnd=r2(run); if(k<=P.to) M.cashEnd=r2(run); if(P.pt&&k<=P.pt) M.cashPrevEnd=r2(run); });
+  M.months=ks; M.net=r2(M.rev-M.cost); M.prev.net=r2(M.prev.rev-M.prev.cost); M.wt.net=r2(M.wt.rev-M.wt.cost);
+  ks.forEach(k=>{ const b=M.byMonth[k]; b.net=r2(b.rev-b.cost); b.wtNet=r2(b.wtRev-b.wtCost); });
+  M.wt.netPrev=r2(ks.filter(inPrev).reduce((a,k)=>a+M.byMonth[k].wtNet,0));
+  M.wt.owedPartners=r2(shareP.reduce((a,p)=>a+(M.ap[p]||0),0)); M.shareP=shareP;
+  return M;
+}
+/* ---- SVG charts (hand-drawn, themed, hover tooltips, click to focus a month) ---- */
+function attachTips(wrap){
+  wrap.addEventListener("mousemove",ev=>{ const r=ev.target.closest("[data-t]"); let t=document.querySelector(".ttip"); if(!r){ if(t) t.remove(); return; } if(!t){ t=el("div","ttip"); document.body.appendChild(t); }
+    t.innerHTML=r.getAttribute("data-t"); const x=Math.min(ev.clientX+12,window.innerWidth-t.offsetWidth-8); t.style.left=x+"px"; t.style.top=(ev.clientY-12)+"px"; });
+  wrap.addEventListener("mouseleave",()=>{ const t=document.querySelector(".ttip"); if(t) t.remove(); });
+}
+const nice=v=>{ const a=Math.abs(v); if(a>=1e6) return (v/1e6).toFixed(1)+"M"; if(a>=1e3) return Math.round(v/1e3)+"k"; return String(Math.round(v)); };
+function chartInOut(M,keys){   // revenue up / costs down per month, net line; stacked by company in Consolidated
+  const wrap=el("div","chartwrap"); const cos=scope==="consolidated"?["Vyltic","Welltold"]:[scopeLabel[scope]]; const col={Vyltic:"var(--vy)",Welltold:"var(--we)"};
+  const vals=keys.flatMap(k=>[M.byMonth[k]?M.byMonth[k].rev:0,M.byMonth[k]?M.byMonth[k].cost:0,M.byMonth[k]?Math.abs(M.byMonth[k].net):0]); const max=Math.max(1,...vals);
+  const W=640,H=230,L=42,R=10,T=14,B=30,zero=T+(H-T-B)/2, sc=(H-T-B)/2/max, gw=(W-L-R)/keys.length, bw=Math.min(28,gw*0.52);
+  let s='<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="Money in and out by month">';
+  [1,0.5].forEach(f=>{ const y1=zero-max*f*sc, y2=zero+max*f*sc; s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y1+'" y2="'+y1+'" stroke="var(--line)"/><line x1="'+L+'" x2="'+(W-R)+'" y1="'+y2+'" y2="'+y2+'" stroke="var(--line)"/><text x="'+(L-6)+'" y="'+(y1+4)+'" font-size="10" text-anchor="end">'+nice(max*f)+'</text><text x="'+(L-6)+'" y="'+(y2+4)+'" font-size="10" text-anchor="end">−'+nice(max*f)+'</text>'; });
+  s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+zero+'" y2="'+zero+'" stroke="var(--line2)" stroke-width="1.2"/><text x="'+(L-6)+'" y="'+(zero+4)+'" font-size="10" text-anchor="end">0</text>';
+  const pts=[];
+  keys.forEach((k,i)=>{ const b=M.byMonth[k]||{rev:0,cost:0,net:0,revCo:{},costCo:{}}; const x=L+i*gw+(gw-bw)/2; const inP=k>=M.P.from&&k<=M.P.to;
+    let y=zero; cos.forEach(co=>{ const v=cos.length>1?(b.revCo[co]||0):b.rev; const h=v*sc; if(h>0.2){ s+='<rect class="bar'+(inP?" on":"")+'" data-t="'+esc(monthName(k)+" · "+co+" revenue: "+fmt(v))+'" data-m="'+k+'" x="'+x+'" y="'+(y-h)+'" width="'+bw+'" height="'+h+'" fill="'+col[co]+'" rx="2"/>'; y-=h; } });
+    y=zero; cos.forEach(co=>{ const v=cos.length>1?(b.costCo[co]||0):b.cost; const h=v*sc; if(h>0.2){ s+='<rect class="bar cost'+(inP?" on":"")+'" data-t="'+esc(monthName(k)+" · "+co+" costs: "+fmt(v))+'" data-m="'+k+'" x="'+x+'" y="'+y+'" width="'+bw+'" height="'+h+'" fill="'+col[co]+'" rx="2"/>'; y+=h; } });
+    pts.push([x+bw/2,zero-b.net*sc,k,b.net]);
+    s+='<text x="'+(x+bw/2)+'" y="'+(H-10)+'" font-size="10.5" text-anchor="middle"'+(inP?' font-weight="700" fill="var(--ink)"':'')+'>'+esc(shortMonth(k))+'</text>'; });
+  s+='<polyline points="'+pts.map(p=>p[0]+","+p[1]).join(" ")+'" fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linejoin="round" opacity=".75"/>';
+  pts.forEach(p=>{ s+='<circle data-t="'+esc(monthName(p[2])+" · net "+(p[3]>=0?"profit":"loss")+": "+fmt(p[3]))+'" data-m="'+p[2]+'" cx="'+p[0]+'" cy="'+p[1]+'" r="3.4" fill="var(--surface)" stroke="var(--ink)" stroke-width="1.6"/>'; });
+  s+='</svg>'; wrap.innerHTML=s; attachTips(wrap);
+  wrap.addEventListener("click",ev=>{ const r=ev.target.closest("[data-m]"); if(!r) return; DASH.month=r.getAttribute("data-m"); DASH.period="month"; render(); });
   return wrap;
 }
-
-/* ---------- entry (draft for everyone; Makers post straight into the books) ---------- */
+function chartDonut(items,total,center){
+  const wrap=el("div","donutwrap"); const W=170,R=70,r=46,cx=85,cy=85; let a=-Math.PI/2; let s='<svg viewBox="0 0 170 170" width="170" height="170" role="img">';
+  if(!total){ s+='<circle cx="85" cy="85" r="58" fill="none" stroke="var(--line)" stroke-width="22"/>'; }
+  items.forEach((it,i)=>{ const f=it.value/total; if(f<=0) return; const a2=a+f*2*Math.PI; const big=f>0.5?1:0;
+    const p=[cx+R*Math.cos(a),cy+R*Math.sin(a),cx+R*Math.cos(a2),cy+R*Math.sin(a2),cx+r*Math.cos(a2),cy+r*Math.sin(a2),cx+r*Math.cos(a),cy+r*Math.sin(a)];
+    s+='<path data-t="'+esc(it.label+": "+fmt(it.value)+" ("+Math.round(f*100)+"%)")+'" d="M'+p[0]+' '+p[1]+' A'+R+' '+R+' 0 '+big+' 1 '+p[2]+' '+p[3]+' L'+p[4]+' '+p[5]+' A'+r+' '+r+' 0 '+big+' 0 '+p[6]+' '+p[7]+'Z" fill="'+it.color+'" stroke="var(--surface)" stroke-width="1.5"/>'; a=a2; });
+  s+='<text x="85" y="81" text-anchor="middle" font-size="11">'+esc(center.lbl)+'</text><text x="85" y="98" text-anchor="middle" font-size="14" font-weight="600" fill="var(--ink)" font-family="IBM Plex Mono">'+esc(center.val)+'</text></svg>';
+  const leg=el("div","dleg"); items.forEach(it=>{ leg.appendChild(el("div","dli",'<i style="background:'+it.color+'"></i><span class="t">'+esc(it.label)+'</span><span class="mono">'+fmt(it.value)+'</span><span class="meta">'+(total?Math.round(it.value/total*100):0)+'%</span>')); });
+  wrap.innerHTML=s; wrap.appendChild(leg); attachTips(wrap); return wrap;
+}
+function chartHBars(items,color,onClick){
+  const wrap=el("div","hbars"); const max=Math.max(1,...items.map(i=>Math.abs(i.value)));
+  items.forEach(it=>{ const row=el("div","hb"); const w=Math.max(1,Math.abs(it.value)/max*100);
+    row.innerHTML='<span class="t">'+esc(it.label)+'</span><span class="bar"><i style="width:'+w+'%;background:'+(it.color||color)+'" data-t="'+esc(it.label+": "+fmt(it.value))+'"></i></span><span class="mono v">'+fmt(it.value)+'</span>';
+    if(onClick){ row.classList.add("link"); row.onclick=()=>onClick(it); } wrap.appendChild(row); });
+  if(!items.length) wrap.appendChild(el("p","meta","Nothing in this period.")); attachTips(wrap); return wrap;
+}
+function chartLine(keys,vals,label){
+  const wrap=el("div","chartwrap"); const W=640,H=170,L=46,R=26,T=12,B=28; const lo=Math.min(0,...vals), hi=Math.max(1,...vals); const sc=(H-T-B)/(hi-lo||1); const y=v=>T+(hi-v)*sc; const gw=(W-L-R)/Math.max(1,keys.length-1);
+  let s='<svg viewBox="0 0 '+W+' '+H+'" width="100%" role="img" aria-label="'+esc(label)+'">';
+  [hi,0,lo].filter((v,i,a)=>a.indexOf(v)===i).forEach(v=>{ s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v)+'" y2="'+y(v)+'" stroke="'+(v===0?"var(--line2)":"var(--line)")+'"/><text x="'+(L-6)+'" y="'+(y(v)+4)+'" font-size="10" text-anchor="end">'+nice(v)+'</text>'; });
+  const pts=keys.map((k,i)=>[L+i*gw,y(vals[i])]);
+  s+='<path d="M'+pts.map(p=>p[0]+" "+p[1]).join(" L")+' L'+pts[pts.length-1][0]+' '+y(0)+' L'+pts[0][0]+' '+y(0)+'Z" fill="var(--acc)" opacity=".10"/>';
+  s+='<polyline points="'+pts.map(p=>p[0]+","+p[1]).join(" ")+'" fill="none" stroke="var(--acc)" stroke-width="2" stroke-linejoin="round"/>';
+  pts.forEach((p,i)=>{ s+='<circle data-t="'+esc(monthName(keys[i])+": "+fmt(vals[i]))+'" data-m="'+keys[i]+'" cx="'+p[0]+'" cy="'+p[1]+'" r="3.5" fill="'+(vals[i]<0?"var(--neg)":"var(--surface)")+'" stroke="var(--acc)" stroke-width="1.8"/>'; if(keys.length<=12||i%2===0) s+='<text x="'+p[0]+'" y="'+(H-8)+'" font-size="10" text-anchor="middle">'+esc(shortMonth(keys[i]))+'</text>'; });
+  s+='</svg>'; wrap.innerHTML=s; attachTips(wrap); wrap.addEventListener("click",ev=>{ const r=ev.target.closest("[data-m]"); if(!r) return; DASH.month=r.getAttribute("data-m"); DASH.period="month"; render(); }); return wrap;
+}
+function spark(vals,neg){ if(!vals.length) return ""; const W=96,H=28; const lo=Math.min(0,...vals), hi=Math.max(...vals,0.0001); const y=v=>2+(H-4)*(1-(v-lo)/((hi-lo)||1)); const pts=vals.map((v,i)=>[(i/(vals.length-1||1))*(W-4)+2,y(v)]);
+  return '<svg class="spark" viewBox="0 0 '+W+' '+H+'" width="'+W+'" height="'+H+'"><polyline points="'+pts.map(p=>p[0].toFixed(1)+","+p[1].toFixed(1)).join(" ")+'" fill="none" stroke="'+(neg?"var(--neg)":"var(--acc)")+'" stroke-width="1.6" stroke-linejoin="round"/><circle cx="'+pts[pts.length-1][0].toFixed(1)+'" cy="'+pts[pts.length-1][1].toFixed(1)+'" r="2.4" fill="'+(neg?"var(--neg)":"var(--acc)")+'"/></svg>'; }
+function kpi(opts){   // {icon,label,value,sub,delta:{cur,prev,label,invert},spark,neg,tip,onClick,chips:[...]}
+  const c=el("div","kpi"+(opts.onClick?" link":"")); let d="";
+  if(opts.delta&&opts.delta.prev!=null&&opts.delta.label&&opts.delta.abs){ const df=r2(opts.delta.cur-opts.delta.prev); if(Math.abs(df)>0.004) d='<span class="delta '+(df>=0?"up":"dn")+'">'+(df>0?"+":"−")+fmt(Math.abs(df))+'</span><span class="meta"> vs '+esc(opts.delta.label)+'</span>'; else d='<span class="meta">unchanged vs '+esc(opts.delta.label)+'</span>'; }
+  else if(opts.delta&&opts.delta.prev!=null&&opts.delta.label){ const p=pct(opts.delta.cur,opts.delta.prev); if(p!=null&&isFinite(p)){ const good=opts.delta.invert?p<=0:p>=0; d='<span class="delta '+(good?"up":"dn")+'">'+(p>0?"+":"")+p+'%</span><span class="meta"> vs '+esc(opts.delta.label)+'</span>'; } else if(opts.delta.prev===0&&opts.delta.cur!==0) d='<span class="meta">nothing in '+esc(opts.delta.label)+'</span>'; }
+  c.innerHTML='<div class="khead"><span class="kico">'+(opts.icon||"")+'</span><span class="lbl">'+esc(opts.label)+'</span>'+(opts.tip?'<span class="help" data-t="'+esc(opts.tip)+'">?</span>':"")+'</div>'
+    +'<div class="kval mono'+(opts.neg?" neg":"")+'">'+fmt(opts.value)+'</div>'+(opts.spark?'<div class="kspark">'+opts.spark+'</div>':"")
+    +'<div class="ksub">'+(d?'<div>'+d+'</div>':"")+(opts.sub?'<div class="meta">'+opts.sub+'</div>':"")+'</div>'+(opts.chips&&opts.chips.length?'<div class="chips">'+opts.chips.map(x=>'<span class="chip">'+x+'</span>').join("")+'</div>':"");
+  if(opts.onClick) c.onclick=opts.onClick; return c;
+}
+function card(title,body,sub,extra){ const c=el("div","card dcard"); const h=el("div","chead"); h.innerHTML='<span class="ctitle">'+esc(title)+'</span>'+(sub?'<span class="meta">'+sub+'</span>':""); if(extra) h.appendChild(extra); c.appendChild(h); if(body) c.appendChild(body); return c; }
+function viewDash(m){
+  if(KEYS.consolidated&&!CLOSING){ m.innerHTML='<div class="skel"></div>'; loadClosing().then(()=>{ if(tab==="Dashboard") render(); }).catch(()=>{ CLOSING=CLOSING||{employees:[],assets:[],settings:{},runs:{},months:{},subs:[],clients:[]}; if(tab==="Dashboard") render(); }); return; }
+  const M=dashModel(); const P=M.P; const partner=scope==="welltold"&&!KEYS.consolidated; const wt=scope!=="vyltic";
+  // ---- header: period
+  const top=el("div","dtop"); top.appendChild(el("div","dtitle",'<span class="h">'+esc(scopeLabel[scope]||"Books")+' at a glance</span><span class="meta">'+esc(P.label)+(P.pt?' · compared with '+esc(P.plabel):"")+'</span>'));
+  const ctl=el("div","dctl"); const prev=el("button","iconbtn","‹"); prev.title="Previous month"; prev.onclick=()=>{ DASH.month=idxMonth(monthIdx(DASH.month)-1); render(); };
+  const mi=el("input"); mi.type="month"; mi.value=DASH.month; mi.max=thisMonth(); mi.onchange=()=>{ if(mi.value){ DASH.month=mi.value; render(); } };
+  const next=el("button","iconbtn","›"); next.title="Next month"; next.disabled=DASH.month>=thisMonth(); next.onclick=()=>{ DASH.month=idxMonth(monthIdx(DASH.month)+1); render(); };
+  const seg=el("div","seg"); [["month","Month"],["3m","3 months"],["ytd","Year to date"],["all","All time"]].forEach(([k,l])=>{ const b=el("button","",l); b.setAttribute("aria-pressed",DASH.period===k?"true":"false"); b.onclick=()=>{ DASH.period=k; render(); }; seg.appendChild(b); });
+  ctl.append(prev,mi,next,seg); top.appendChild(ctl); m.appendChild(top);
+  // ---- KPI cards
+  const g=el("div","kgrid"); const ks=M.months; const last12=ks.slice(-12);
+  const arTotal=r2(Object.values(M.ar).reduce((a,v)=>a+Math.max(v,0),0)), apTotal=r2(Object.values(M.apCode).reduce((a,v)=>a+v,0));
+  const topAr=Object.entries(M.ar).filter(([,v])=>v>0.004).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const empNames=new Set(((CLOSING&&CLOSING.employees)||[]).map(p=>p.name).concat(LISTS["Employees"]||[]));
+  const apSal=r2(Object.entries(M.ap).filter(([p,v])=>v>0.004&&empNames.has(p)&&!M.shareP.includes(p)).reduce((a,[,v])=>a+v,0)), apShare=M.wt.owedPartners, apOther=r2(apTotal-apSal-apShare);
+  const cashSeries=last12.map(k=>M.byMonth[k].cashEnd), revS=last12.map(k=>M.byMonth[k].rev), costS=last12.map(k=>M.byMonth[k].cost), netS=last12.map(k=>M.byMonth[k].net);
+  if(!partner){
+    g.appendChild(kpi({icon:ICON.cash,label:"Cash in the books",value:M.cashEnd,neg:M.cashEnd<0,spark:spark(cashSeries,M.cashEnd<0),delta:{cur:M.cashEnd,prev:M.cashPrevEnd,label:P.plabel,abs:true},
+      sub:M.cashEnd<0?"Negative — money received after the last bank statement is not all recorded yet.":"Cash and bank balance at the end of "+esc(P.label)+".",tip:"Balance of the cash/bank accounts (1000-series) up to the end of the period, per the entries in the books.",onClick:()=>goTab("GL",{gl:""})}));
+    g.appendChild(kpi({icon:ICON.inbox,label:"Owed to us",value:arTotal,spark:"",sub:"Invoices sent and not yet collected.",tip:"Accounts Receivable (1100) balances by client / venue, excluding the bank-timing line.",chips:topAr.map(([p,v])=>esc(p)+" "+fmt(v)),onClick:()=>goTab(tabsList().includes("Clients")?"Clients":"Balance Sheet")}));
+    g.appendChild(kpi({icon:ICON.users,label:"We owe",value:apTotal,sub:"Salaries, suppliers, taxes and partners' share not yet paid.",tip:"Accounts Payable, accrued liabilities, taxes payable and related-party balances (2000 / 2100 / 2200 / 2510).",chips:[apSal>0.004?"salaries "+fmt(apSal):"",apShare>0.004?"partners "+fmt(apShare):"",apOther>0.004?"other "+fmt(apOther):""].filter(Boolean),onClick:()=>goTab(tabsList().includes("Closing")?"Closing":"Balance Sheet")}));
+  }
+  g.appendChild(kpi({icon:ICON.out,label:"Money earned",value:M.rev,spark:spark(revS),delta:{cur:M.rev,prev:M.prev.rev,label:P.plabel},sub:"Revenue booked in "+esc(P.label)+".",tip:"All revenue accounts (4000-series), before costs.",onClick:()=>goTab("P&L")}));
+  g.appendChild(kpi({icon:ICON.down,label:"Money spent",value:M.cost,spark:spark(costS),delta:{cur:M.cost,prev:M.prev.cost,label:P.plabel,invert:true},sub:"Costs and expenses booked in "+esc(P.label)+".",tip:"All cost and expense accounts (5000-series), including salaries and event costs.",onClick:()=>goTab("P&L")}));
+  g.appendChild(kpi({icon:ICON.trend,label:M.net>=0?"Profit":"Loss",value:M.net,neg:M.net<0,spark:spark(netS,M.net<0),delta:{cur:M.net,prev:M.prev.net,label:P.plabel},sub:(M.net>=0&&M.rev?"Margin "+Math.round(M.net/M.rev*100)+"% — earned minus spent.":"Spent "+fmt(-M.net)+" more than earned."),tip:"Revenue minus all costs for the period (net result).",onClick:()=>goTab("P&L")}));
+  if(wt){ const each=r2(M.wt.net/3); const booked=r2(M.wt.share/2);
+    g.appendChild(kpi({icon:ICON.users,label:"Welltold partners’ share",value:each,neg:each<0,sub:(each>=0?"⅓ each of Welltold’s "+fmt(M.wt.net)+" net":"Welltold made a loss of "+fmt(-M.wt.net)+" — shared ⅓ each")+(M.wt.share?" · booked "+fmt(booked)+" each":" · not booked yet")+".",tip:"Welltold net = its revenue minus every Welltold cost except the share itself; Joud and Rami each get a third. Booked by the Closing tab at month-end.",
+      chips:[apShare>0.004?"owed to "+esc(M.shareP.join(" & "))+" (share + salary) "+fmt(apShare):""].filter(Boolean),onClick:()=>goTab(tabsList().includes("Closing")?"Closing":"GL")})); }
+  if(partner){ const arW=r2(Object.values(M.wt.arClient).reduce((a,v)=>a+Math.max(v,0),0)); const wCash=r2(M.entries.reduce((a,e)=>a+e.lines.reduce((b,l)=>b+(CASH_CODES().includes(l.code)&&l.co==="Welltold"&&(e.date||"").slice(0,7)<=P.to?(+l.dr)-(+l.cr):0),0),0));
+    g.appendChild(kpi({icon:ICON.inbox,label:"Clients still to pay",value:arW,sub:"Welltold invoices not yet collected.",chips:Object.entries(M.wt.arClient).filter(([,v])=>v>0.004).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([p,v])=>esc(p)+" "+fmt(v))}));
+    g.appendChild(kpi({icon:ICON.cash,label:"Welltold cash in the books",value:wCash,neg:wCash<0,sub:"Welltold’s share of the pooled bank balance.",tip:"Welltold has no bank account of its own; this is its running balance inside the entity’s pooled cash."})); }
+  g.classList.add("k"+g.children.length); m.appendChild(g); attachTips(g);
+  // ---- attention
+  const att=attentionItems(M); if(att.length){ const list=el("div","attn"); att.forEach(it=>{ const r=el(it.go?"button":"div","ai"+(it.ok?" ok":"")); r.innerHTML='<span class="aic">'+(it.ok?ICON.check:ICON.alert)+'</span><span class="t">'+it.text+'</span>'+(it.go?'<span class="go">'+esc(it.goLabel||"Open")+' '+ICON.arrow+'</span>':""); if(it.go) r.onclick=it.go; list.appendChild(r); });
+    m.appendChild(card("Needs attention",list,att.filter(x=>!x.ok).length?att.filter(x=>!x.ok).length+" item"+(att.filter(x=>!x.ok).length===1?"":"s"):"all clear")); }
+  // ---- charts row 1: in/out + revenue mix
+  const row1=el("div","drow"); const keys12=(()=>{ const end=P.to==="9999-12"?(ks[ks.length-1]||thisMonth()):P.to; const n=P.from==="0000-01"?Math.min(24,ks.length):12; const out=[]; for(let i=monthIdx(end)-n+1;i<=monthIdx(end);i++) out.push(idxMonth(i)); return out.filter(k=>k>=(ks[0]||"0000")); })();
+  row1.appendChild(card("Money in and out by month",chartInOut(M,keys12),"bars up = earned, bars down = spent, line = result · click a month to focus"));
+  const revItems=Object.entries(M.revAcct).filter(([,v])=>Math.abs(v)>0.004).sort((a,b)=>b[1]-a[1]).map(([c,v],i)=>({label:(ACC[c]||{}).name||c,value:v,color:PAL[i%PAL.length]})); const revTot=revItems.reduce((a,x)=>a+x.value,0);
+  const mix=revItems.length>7?revItems.slice(0,6).concat([{label:"Other",value:r2(revItems.slice(6).reduce((a,x)=>a+x.value,0)),color:PAL[7]}]):revItems;
+  row1.appendChild(card("Where the money came from",chartDonut(mix,revTot,{lbl:"earned",val:nice(revTot)}),esc(P.label)));
+  m.appendChild(row1);
+  // ---- charts row 2: costs + cash trend (or Welltold clients)
+  const row2=el("div","drow");
+  const costItems=Object.entries(M.costAcct).filter(([,v])=>Math.abs(v)>0.004).sort((a,b)=>b[1]-a[1]).slice(0,9).map(([c,v])=>({label:(ACC[c]||{}).name||c,value:v,code:c}));
+  row2.appendChild(card("Where the money went",chartHBars(costItems,"var(--c2)",it=>{ REP.gl=REP.gl||{}; REP.gl.a=it.code; REP.gl.m=DASH.period==="month"?DASH.month:""; repSave(); goTab("GL",{gl:""}); }),esc(P.label)+" · click a line to see its entries"));
+  if(wt){ const cl=Object.entries(M.wt.revClient).filter(([,v])=>Math.abs(v)>0.004).sort((a,b)=>b[1]-a[1]).slice(0,9).map(([p,v])=>({label:p,value:v})); row2.appendChild(card("Welltold revenue by client",chartHBars(cl,"var(--we)",it=>goTab("GL",{gl:it.label})),esc(P.label))); }
+  else row2.appendChild(card("Cash over time",chartLine(last12,cashSeries,"Cash balance by month"),"balance at each month-end"));
+  m.appendChild(row2);
+  if(wt&&!partner){ const row3=el("div","drow"); row3.appendChild(card("Cash over time",chartLine(last12,cashSeries,"Cash balance by month"),"balance at each month-end"));
+    const arItems=Object.entries(M.ar).filter(([,v])=>v>0.004).sort((a,b)=>b[1]-a[1]).slice(0,9).map(([p,v])=>({label:p,value:v,color:M.arOldest[p]&&daysBetween(M.arOldest[p],today())>60?"var(--neg)":"var(--c3)"}));
+    row3.appendChild(card("Who owes us",chartHBars(arItems,"var(--c3)",it=>goTab("GL",{gl:it.label})),"open balances · red = older than 60 days")); m.appendChild(row3); }
+  // ---- recent activity
+  const rec=el("div","recents"); M.entries.slice().sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:b.n-a.n).slice(0,8).forEach(e=>{ const co=e.lines[0]&&e.lines[0].co; const r=el("button","recent");
+    r.innerHTML='<span class="d mono">'+esc((e.date||"").slice(5))+'</span><span class="pill '+(co==="Vyltic"?"vy":"we")+'">'+esc((co||"").slice(0,1))+'</span><span class="t">#'+e.n+' · '+esc(e.memo||(e.lines[0]||{}).desc||"")+'</span><span class="meta by">'+esc(NAMES[e.by]||(e.by||"").split("@")[0]||"")+'</span><span class="a">'+fmt(e.lines.reduce((a,l)=>a+(+l.dr),0))+'</span>';
+    r.onclick=()=>openGL("#"+e.n); rec.appendChild(r); });
+  const last=M.entries.reduce((a,e)=>e.n>a.n?e:a,{n:0});
+  m.appendChild(card("Latest entries",rec,last.n?"latest #"+last.n+" · "+esc(last.date):""));
+  m.appendChild(el("p","meta dfoot","Figures come straight from the entries in the books for "+esc(scopeLabel[scope]||scope)+". Signed in as "+esc(WHO)+" · "+rightsLabel()+"."));
+}
+function attentionItems(M){
+  const out=[]; const mo=DASH.month; const c=CLOSING; const canClose=tabsList().includes("Closing");
+  const pc=pendingCount(); if(KEYS.maker){ if(pc) out.push({text:pc+" draft entr"+(pc===1?"y is":"ies are")+" waiting in Pending"+(can("post")?" for posting.":"."),go:()=>goTab("Pending"),goLabel:"Pending"}); }
+  if(canClose&&c){ const runs=(c.runs||{})[mo]||{}; const steps=[["salaries","Salaries"],["subs","Subscriptions"],["depreciation","Depreciation"],["share","Welltold profit share"]];
+    const due=(c.clients||[]).filter(x=>x.kind==="retainer"&&x.company==="Welltold"&&x.client&&cliActive(x,mo)); const openRet=due.filter(x=>x.amount!=null&&sumCr(cliBooked(M.entries,x,mo,"Welltold"))<x.amount-0.004);
+    if(mo<thisMonth()){ const missing=steps.filter(([k])=>!runs[k]).map(([,l])=>l); if(due.length&&openRet.length) missing.unshift("Retainers ("+openRet.length+" not invoiced)");
+      if(missing.length) out.push({text:"Month-end for <b>"+esc(monthName(mo))+"</b> not finished: "+esc(missing.join(", "))+".",go:()=>goTab(missing[0].startsWith("Retainers")?"Clients":"Closing",{month:mo}),goLabel:missing[0].startsWith("Retainers")?"Clients":"Closing"});
+      else out.push({ok:true,text:"Month-end for "+esc(monthName(mo))+" is complete (salaries, subscriptions, depreciation, share"+(due.length?", retainers":"")+")."}); }
+    if(mo<thisMonth()&&runs.share&&runs.retainers&&runs.retainers.at>runs.share.at) out.push({text:"Retainers for "+esc(monthName(mo))+" were invoiced after the profit share was run — re-run the share.",go:()=>goTab("Closing",{month:mo}),goLabel:"Closing"});
+    const empNames=new Set((c.employees||[]).map(p=>p.name)); const unpaid=Object.entries(M.ap).filter(([p,v])=>v>0.004&&empNames.has(p)&&!M.shareP.includes(p)); if(unpaid.length) out.push({text:"Salaries still unpaid: "+esc(unpaid.map(([p,v])=>p+" "+fmt(v)).join(", "))+".",go:()=>goTab("Closing",{month:mo}),goLabel:"Closing"}); }
+  const oldAr=Object.entries(M.ar).filter(([p,v])=>v>0.004&&M.arOldest[p]&&daysBetween(M.arOldest[p],today())>60).sort((a,b)=>b[1]-a[1]);
+  if(oldAr.length) out.push({text:"Receivables older than 60 days: "+esc(oldAr.slice(0,4).map(([p,v])=>p+" "+fmt(v)).join(", "))+(oldAr.length>4?" and "+(oldAr.length-4)+" more":"")+".",go:()=>goTab(tabsList().includes("Clients")?"Clients":"GL",{gl:oldAr[0][0]}),goLabel:tabsList().includes("Clients")?"Clients":"GL"});
+  if(M.flags.unclassified.length) out.push({text:M.flags.unclassified.length+" entr"+(M.flags.unclassified.length===1?"y":"ies")+" marked [to classify] or [unconfirmed]: #"+M.flags.unclassified.slice(0,6).join(", #")+".",go:()=>goTab("GL",{gl:"[to classify]"}),goLabel:"GL"});
+  if(scope!=="welltold"&&M.cashEnd<0) out.push({text:"Cash in the books is negative ("+fmt(M.cashEnd)+"): bank statements are tied to 9 Aug; collections and transfers since then still need recording.",go:can("post")?()=>goTab("Entry"):null,goLabel:"Entry"});
+  return out;
+}
 function blankLine(){ return {code:"",party:"",desc:"",dr:"",cr:""}; }
 function partyOptions(){
   const s=new Set(); ["Customers","Vendors (Suppliers)","Employees"].forEach(k=>(LISTS[k]||[]).forEach(v=>s.add(v)));
