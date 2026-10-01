@@ -284,6 +284,20 @@ button.recent:hover{background:var(--acc-soft)}
 .recent .by{flex:none;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .recent .pill{flex:none;padding:0 6px}
 .dfoot{margin-top:14px}
+table.arap{min-width:900px}
+table.arap button.exp{font-weight:600;color:var(--ink);padding:0;text-align:left}
+table.arap tr.prow.open td{background:var(--acc-soft)}
+table.arap tr.pdet>td{padding:6px 10px 12px 34px;background:var(--surface2)}
+table.items{border-collapse:collapse;width:100%}
+table.items th{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);text-align:left;padding:4px 8px}
+table.items td{padding:4px 8px;font-size:12.5px;border-top:1px solid var(--line)}
+table.items tr.done td{color:var(--faint)}
+table.items tr.cred td{color:var(--warn)}
+table.items .btn3{padding:0 2px}
+table.items td.mono,table.arap td.mono{white-space:nowrap}
+table.arap td:last-child{white-space:nowrap}
+table.arap td:last-child .btn3{padding:4px 6px}
+.tiles{margin-bottom:12px}
 @media(max-width:700px){nav.tabs .grp{flex-wrap:wrap}.search input{width:38vw}.me .who,.me .meta{display:none}.hrow{padding:8px 12px}main{padding:12px 12px 60px}.kval{font-size:22px}}
 </style>
 </head>
@@ -488,7 +502,7 @@ function renderScopes(){
     n.appendChild(b); });
 }
 function tabsList(){
-  const t=["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance","Lists","CoA"];
+  const t=["Dashboard","P&L","Balance Sheet","Cash Flow","Receivables","Payables","GL","Trial Balance","Lists","CoA"];
   if(can("entries")||can("post")) t.push("Entry","Pending");
   if(assetsOK()) t.push("Assets","Clients");
   if(closingOK()) t.push("Employees","Closing");
@@ -499,7 +513,7 @@ function render(){
   const m=document.getElementById("main"); m.innerHTML="";
   if(!tabsList().includes(tab)) tab="Dashboard";
   renderTabs();
-  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Pending":viewPending,"Assets":viewAssets,"Clients":viewClients,"Employees":viewEmployees,"Closing":viewClosing,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
+  ({"Dashboard":viewDash,"P&L":viewPL,"Balance Sheet":viewBS,"Cash Flow":viewCF,"Receivables":viewReceivables,"Payables":viewPayables,"GL":viewGL,"Trial Balance":viewTB,"Lists":viewLists,"CoA":viewCoA,"Entry":viewEntry,"Pending":viewPending,"Assets":viewAssets,"Clients":viewClients,"Employees":viewEmployees,"Closing":viewClosing,"Guide":viewGuide,"Admin":viewAdmin})[tab](m);
 }
 
 /* ---------- report engine ---------- */
@@ -864,7 +878,7 @@ const ICON={
   logout:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 4H5v16h5M14 8l5 4-5 4M19 12H9"/></svg>'
 };
 /* ---------- header tools: search across the books, theme, who am I ---------- */
-const TAB_GROUPS=[["Reports",["Dashboard","P&L","Balance Sheet","Cash Flow","GL","Trial Balance"]],["Work",["Entry","Pending","Clients","Employees","Closing","Assets"]],["Setup",["Lists","CoA","Admin","Guide"]]];
+const TAB_GROUPS=[["Reports",["Dashboard","P&L","Balance Sheet","Cash Flow","Receivables","Payables","GL","Trial Balance"]],["Work",["Entry","Pending","Clients","Employees","Closing","Assets"]],["Setup",["Lists","CoA","Admin","Guide"]]];
 const pendingCount=()=>{ if(!PENDING||!Array.isArray(PENDING.items)) return 0; const cos=myCompanies().map(s=>scopeLabel[s]); return PENDING.items.filter(it=>it.status==="pending"&&cos.includes(it.co)).length; };
 function renderTools(){
   const n=document.getElementById("tools"); if(!n) return; n.innerHTML="";
@@ -1020,8 +1034,8 @@ function viewDash(m){
   if(!partner){
     g.appendChild(kpi({icon:ICON.cash,label:"Cash in the books",value:M.cashEnd,neg:M.cashEnd<0,spark:spark(cashSeries,M.cashEnd<0),delta:{cur:M.cashEnd,prev:M.cashPrevEnd,label:P.plabel,abs:true},
       sub:M.cashEnd<0?"Negative — money received after the last bank statement is not all recorded yet.":"Cash and bank balance at the end of "+esc(P.label)+".",tip:"Balance of the cash/bank accounts (1000-series) up to the end of the period, per the entries in the books.",onClick:()=>goTab("GL",{gl:""})}));
-    g.appendChild(kpi({icon:ICON.inbox,label:"Owed to us",value:arTotal,spark:"",sub:"Invoices sent and not yet collected.",tip:"Accounts Receivable (1100) balances by client / venue, excluding the bank-timing line.",chips:topAr.map(([p,v])=>esc(p)+" "+fmt(v)),onClick:()=>goTab(tabsList().includes("Clients")?"Clients":"Balance Sheet")}));
-    g.appendChild(kpi({icon:ICON.users,label:"We owe",value:apTotal,sub:"Salaries, suppliers, taxes and partners' share not yet paid.",tip:"Accounts Payable, accrued liabilities, taxes payable and related-party balances (2000 / 2100 / 2200 / 2510).",chips:[apSal>0.004?"salaries "+fmt(apSal):"",apShare>0.004?"partners "+fmt(apShare):"",apOther>0.004?"other "+fmt(apOther):""].filter(Boolean),onClick:()=>goTab(tabsList().includes("Closing")?"Closing":"Balance Sheet")}));
+    g.appendChild(kpi({icon:ICON.inbox,label:"Owed to us",value:arTotal,spark:"",sub:"Invoices sent and not yet collected.",tip:"Accounts Receivable (1100) balances by client / venue, excluding the bank-timing line.",chips:topAr.map(([p,v])=>esc(p)+" "+fmt(v)),onClick:()=>goTab("Receivables")}));
+    g.appendChild(kpi({icon:ICON.users,label:"We owe",value:apTotal,sub:"Salaries, suppliers, taxes and partners' share not yet paid.",tip:"Accounts Payable, accrued liabilities, taxes payable and related-party balances (2000 / 2100 / 2200 / 2510).",chips:[apSal>0.004?"salaries "+fmt(apSal):"",apShare>0.004?"partners "+fmt(apShare):"",apOther>0.004?"other "+fmt(apOther):""].filter(Boolean),onClick:()=>goTab("Payables")}));
   }
   g.appendChild(kpi({icon:ICON.out,label:"Money earned",value:M.rev,spark:spark(revS),delta:{cur:M.rev,prev:M.prev.rev,label:P.plabel},sub:"Revenue booked in "+esc(P.label)+".",tip:"All revenue accounts (4000-series), before costs.",onClick:()=>goTab("P&L")}));
   g.appendChild(kpi({icon:ICON.down,label:"Money spent",value:M.cost,spark:spark(costS),delta:{cur:M.cost,prev:M.prev.cost,label:P.plabel,invert:true},sub:"Costs and expenses booked in "+esc(P.label)+".",tip:"All cost and expense accounts (5000-series), including salaries and event costs.",onClick:()=>goTab("P&L")}));
@@ -1030,7 +1044,7 @@ function viewDash(m){
     g.appendChild(kpi({icon:ICON.users,label:"Welltold partners’ share",value:each,neg:each<0,sub:(each>=0?"⅓ each of Welltold’s "+fmt(M.wt.net)+" net":"Welltold made a loss of "+fmt(-M.wt.net)+" — shared ⅓ each")+(M.wt.share?" · booked "+fmt(booked)+" each":" · not booked yet")+".",tip:"Welltold net = its revenue minus every Welltold cost except the share itself; Joud and Rami each get a third. Booked by the Closing tab at month-end.",
       chips:[apShare>0.004?"owed to "+esc(M.shareP.join(" & "))+" (share + salary) "+fmt(apShare):""].filter(Boolean),onClick:()=>goTab(tabsList().includes("Closing")?"Closing":"GL")})); }
   if(partner){ const arW=r2(Object.values(M.wt.arClient).reduce((a,v)=>a+Math.max(v,0),0)); const wCash=r2(M.entries.reduce((a,e)=>a+e.lines.reduce((b,l)=>b+(CASH_CODES().includes(l.code)&&l.co==="Welltold"&&(e.date||"").slice(0,7)<=P.to?(+l.dr)-(+l.cr):0),0),0));
-    g.appendChild(kpi({icon:ICON.inbox,label:"Clients still to pay",value:arW,sub:"Welltold invoices not yet collected.",chips:Object.entries(M.wt.arClient).filter(([,v])=>v>0.004).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([p,v])=>esc(p)+" "+fmt(v))}));
+    g.appendChild(kpi({icon:ICON.inbox,label:"Clients still to pay",value:arW,sub:"Welltold invoices not yet collected.",chips:Object.entries(M.wt.arClient).filter(([,v])=>v>0.004).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([p,v])=>esc(p)+" "+fmt(v)),onClick:()=>goTab("Receivables")}));
     g.appendChild(kpi({icon:ICON.cash,label:"Welltold cash in the books",value:wCash,neg:wCash<0,sub:"Welltold’s share of the pooled bank balance.",tip:"Welltold has no bank account of its own; this is its running balance inside the entity’s pooled cash."})); }
   g.classList.add("k"+g.children.length); m.appendChild(g); attachTips(g);
   // ---- attention
@@ -1052,7 +1066,7 @@ function viewDash(m){
   m.appendChild(row2);
   if(wt&&!partner){ const row3=el("div","drow"); row3.appendChild(card("Cash over time",chartLine(last12,cashSeries,"Cash balance by month"),"balance at each month-end"));
     const arItems=Object.entries(M.ar).filter(([,v])=>v>0.004).sort((a,b)=>b[1]-a[1]).slice(0,9).map(([p,v])=>({label:p,value:v,color:M.arOldest[p]&&daysBetween(M.arOldest[p],today())>60?"var(--neg)":"var(--c3)"}));
-    row3.appendChild(card("Who owes us",chartHBars(arItems,"var(--c3)",it=>goTab("GL",{gl:it.label})),"open balances · red = older than 60 days")); m.appendChild(row3); }
+    row3.appendChild(card("Who owes us",chartHBars(arItems,"var(--c3)",it=>{ arapView.focus=it.label; goTab("Receivables"); }),"open balances · red = older than 60 days · click a name for its invoices")); m.appendChild(row3); }
   // ---- recent activity
   const rec=el("div","recents"); M.entries.slice().sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:b.n-a.n).slice(0,8).forEach(e=>{ const co=e.lines[0]&&e.lines[0].co; const r=el("button","recent");
     r.innerHTML='<span class="d mono">'+esc((e.date||"").slice(5))+'</span><span class="pill '+(co==="Vyltic"?"vy":"we")+'">'+esc((co||"").slice(0,1))+'</span><span class="t">#'+e.n+' · '+esc(e.memo||(e.lines[0]||{}).desc||"")+'</span><span class="meta by">'+esc(NAMES[e.by]||(e.by||"").split("@")[0]||"")+'</span><span class="a">'+fmt(e.lines.reduce((a,l)=>a+(+l.dr),0))+'</span>';
@@ -1070,12 +1084,93 @@ function attentionItems(M){
       if(missing.length) out.push({text:"Month-end for <b>"+esc(monthName(mo))+"</b> not finished: "+esc(missing.join(", "))+".",go:()=>goTab(missing[0].startsWith("Retainers")?"Clients":"Closing",{month:mo}),goLabel:missing[0].startsWith("Retainers")?"Clients":"Closing"});
       else out.push({ok:true,text:"Month-end for "+esc(monthName(mo))+" is complete (salaries, subscriptions, depreciation, share"+(due.length?", retainers":"")+")."}); }
     if(mo<thisMonth()&&runs.share&&runs.retainers&&runs.retainers.at>runs.share.at) out.push({text:"Retainers for "+esc(monthName(mo))+" were invoiced after the profit share was run — re-run the share.",go:()=>goTab("Closing",{month:mo}),goLabel:"Closing"});
-    const empNames=new Set((c.employees||[]).map(p=>p.name)); const unpaid=Object.entries(M.ap).filter(([p,v])=>v>0.004&&empNames.has(p)&&!M.shareP.includes(p)); if(unpaid.length) out.push({text:"Salaries still unpaid: "+esc(unpaid.map(([p,v])=>p+" "+fmt(v)).join(", "))+".",go:()=>goTab("Closing",{month:mo}),goLabel:"Closing"}); }
+    const empNames=new Set((c.employees||[]).map(p=>p.name)); const unpaid=Object.entries(M.ap).filter(([p,v])=>v>0.004&&empNames.has(p)&&!M.shareP.includes(p)); if(unpaid.length) out.push({text:"Salaries still unpaid: "+esc(unpaid.map(([p,v])=>p+" "+fmt(v)).join(", "))+".",go:()=>goTab("Payables"),goLabel:"Payables"}); }
   const oldAr=Object.entries(M.ar).filter(([p,v])=>v>0.004&&M.arOldest[p]&&daysBetween(M.arOldest[p],today())>60).sort((a,b)=>b[1]-a[1]);
-  if(oldAr.length) out.push({text:"Receivables older than 60 days: "+esc(oldAr.slice(0,4).map(([p,v])=>p+" "+fmt(v)).join(", "))+(oldAr.length>4?" and "+(oldAr.length-4)+" more":"")+".",go:()=>goTab(tabsList().includes("Clients")?"Clients":"GL",{gl:oldAr[0][0]}),goLabel:tabsList().includes("Clients")?"Clients":"GL"});
+  if(oldAr.length) out.push({text:"Receivables older than 60 days: "+esc(oldAr.slice(0,4).map(([p,v])=>p+" "+fmt(v)).join(", "))+(oldAr.length>4?" and "+(oldAr.length-4)+" more":"")+".",go:()=>goTab("Receivables"),goLabel:"Receivables"});
   if(M.flags.unclassified.length) out.push({text:M.flags.unclassified.length+" entr"+(M.flags.unclassified.length===1?"y":"ies")+" marked [to classify] or [unconfirmed]: #"+M.flags.unclassified.slice(0,6).join(", #")+".",go:()=>goTab("GL",{gl:"[to classify]"}),goLabel:"GL"});
   if(scope!=="welltold"&&M.cashEnd<0) out.push({text:"Cash in the books is negative ("+fmt(M.cashEnd)+"): bank statements are tied to 9 Aug; collections and transfers since then still need recording.",go:can("post")?()=>goTab("Entry"):null,goLabel:"Entry"});
   return out;
+}
+/* ---------- Receivables / Payables tabs: open items per party (oldest paid first), aging, actions ---------- */
+const AR_CODES=["1100"], AP_MAIN=["2000"], AP_OTHER=[["2100","Accrued liabilities"],["2200","Taxes payable"],["2510","Related-party payable"]];
+const AGE_BUCKETS=[["b0","0–30 days",0,30],["b1","31–60",31,60],["b2","61–90",61,90],["b3","over 90",91,1e9]];
+const partyType=(p)=>{ const lc=s=>(s||"").toLowerCase(); const in_=k=>(LISTS[k]||[]).some(v=>lc(v)===lc(p)); const emp=(CLOSING&&CLOSING.employees||[]).some(x=>lc(x.name)===lc(p))||in_("Employees"); const sp=((CLOSING&&CLOSING.settings&&CLOSING.settings.shareParties)||["Joud","Rami"]).some(x=>lc(x)===lc(p));
+  if(sp&&emp) return "partner"; if(emp) return "employee"; if(in_("Customers")) return "client"; if(in_("Vendors (Suppliers)")) return "supplier"; return "other"; };
+function openItems(entries,codes,side,asOf){   // side "dr" (receivable: debits are the invoices) or "cr" (payable: credits are the bills); → {key:{party,co,items:[{date,n,desc,amt,open}],unapplied,total,buckets}}
+  const by={};
+  entries.filter(e=>(e.date||"")<=asOf).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:(+a.n)-(+b.n)).forEach(e=>e.lines.forEach(l=>{ if(!codes.includes(l.code)) return; const party=(l.party||"").trim(); const k=party+"|"+(l.co||""); const r=by[k]=by[k]||{party,co:l.co||"",items:[],unapplied:0,credits:[]};
+    const bill=side==="dr"?(+l.dr||0):(+l.cr||0), pay=side==="dr"?(+l.cr||0):(+l.dr||0);
+    if(bill>0.004) r.items.push({date:e.date,n:+e.n,desc:l.desc||e.memo||"",amt:r2(bill),open:r2(bill),co:l.co||""});
+    if(pay>0.004){ let c=pay; for(const it of r.items){ if(c<=0.004) break; if(it.open>0.004){ const x=Math.min(it.open,c); it.open=r2(it.open-x); c=r2(c-x); } } if(c>0.004){ r.unapplied=r2(r.unapplied+c); r.credits.push({date:e.date,n:+e.n,desc:l.desc||e.memo||"",amt:r2(c)}); } } }));
+  Object.values(by).forEach(r=>{ r.open=r.items.filter(i=>i.open>0.004); r.total=r2(r.open.reduce((a,i)=>a+i.open,0)-r.unapplied); r.buckets={}; AGE_BUCKETS.forEach(b=>r.buckets[b[0]]=0);
+    r.open.forEach(i=>{ const d=daysBetween(i.date,asOf)-1; const b=AGE_BUCKETS.find(b=>d>=b[2]&&d<=b[3])||AGE_BUCKETS[3]; r.buckets[b[0]]=r2(r.buckets[b[0]]+i.open); i.days=d; });
+    r.oldest=r.open.length?r.open[0].date:""; r.last=r.items.length?r.items[r.items.length-1].date:""; r.type=partyType(r.party); });
+  return by;
+}
+function csvDownload(name,rows){ const csv=rows.map(r=>r.map(x=>{x=String(x==null?"":x);return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x;}).join(",")).join("\n"); const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download=name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
+async function postSettle(kind,party,co,amt,date){   // receivable: Dr cash / Cr 1100 party; payable: Dr 2000 party / Cr cash
+  const cash=(CLOSING&&CLOSING.settings&&CLOSING.settings.cashAccount)||"1000"; const lab=kind==="ar"?party+" — collected":party+" — paid";
+  const lines=kind==="ar"?[{code:cash,account:ACC[cash].name,party:"",desc:lab,dr:amt,cr:0,co},{code:"1100",account:ACC["1100"].name,party,desc:lab,dr:0,cr:amt,co}]
+    :[{code:"2000",account:ACC["2000"].name,party,desc:lab,dr:amt,cr:0,co},{code:cash,account:ACC[cash].name,party:"",desc:lab+" to "+party,dr:0,cr:amt,co}];
+  return postEntry({date,memo:lab,lines});
+}
+function viewReceivables(m){ arapView(m,"ar"); }
+function viewPayables(m){ arapView(m,"ap"); }
+function arapView(m,kind){
+  const st=arapView[kind]=arapView[kind]||{asOf:today(),co:"",q:"",settled:false,open:{}};
+  const focus=arapView.focus; arapView.focus=null; if(focus) st.q="";
+  const ar=kind==="ar"; const title=ar?"RECEIVABLES — who owes us":"PAYABLES — what we owe";
+  m.appendChild(el("div","xlhead",title+"   ·   "+esc(scopeLabel[scope]||scope)));
+  m.appendChild(el("p","meta",ar?"Every invoice or amount booked as owed to us (Accounts Receivable), with what is still open after the money received was matched to the oldest open item first. Age counts from the invoice date.":"Every bill, salary or share booked as owed by us (Accounts Payable), with what is still open after payments were matched to the oldest open item first. Age counts from the date it was booked."));
+  const f=el("div","filters"); f.appendChild(el("span","flbl","As of:")); const di=el("input"); di.type="date"; di.value=st.asOf; di.max=today(); di.onchange=()=>{ if(di.value){ st.asOf=di.value; render(); } }; f.appendChild(di);
+  if(scope==="consolidated"){ f.appendChild(el("span","flbl","Company:")); const cs=el("select"); cs.innerHTML='<option value="">Both</option><option>Vyltic</option><option>Welltold</option>'; cs.value=st.co; cs.onchange=()=>{ st.co=cs.value; render(); }; f.appendChild(cs); }
+  const q=el("input"); q.placeholder="Filter by name"; q.value=st.q; q.style.minWidth="160px"; q.oninput=()=>{ st.q=q.value; draw(); }; f.appendChild(q);
+  const lab=el("label","tick"); const cb=el("input"); cb.type="checkbox"; cb.checked=st.settled; cb.onchange=()=>{ st.settled=cb.checked; draw(); }; lab.appendChild(cb); lab.append(" show settled"); f.appendChild(lab);
+  const exp=el("button","btn2","Export CSV"); f.appendChild(exp); m.appendChild(f);
+  const entries=entriesArr().map(x=>x.e); const edit=can("post");
+  const by=openItems(entries,ar?AR_CODES:AP_MAIN,ar?"dr":"cr",st.asOf);
+  let rows=Object.values(by).filter(r=>r.party&&(!st.co||r.co===st.co));
+  if(focus) rows.forEach(r=>{ if(r.party.toLowerCase()===focus.toLowerCase()) st.open[r.party+"|"+r.co]=true; });
+  const blank=Object.values(by).filter(r=>!r.party&&(!st.co||r.co===st.co)).reduce((a,r)=>a+r.total,0);
+  // summary tiles
+  const tot=r2(rows.reduce((a,r)=>a+r.total,0)), over=rows.reduce((a,r)=>a+r.buckets.b2+r.buckets.b3,0), cnt=rows.filter(r=>r.total>0.004).length;
+  const byType={}; rows.forEach(r=>{ if(r.total>0.004) byType[r.type]=r2((byType[r.type]||0)+r.total); });
+  const tiles=el("div","tiles");
+  const tile=(a,v,s,cls)=>tiles.appendChild(el("div","tile",'<div class="lbl">'+a+'</div><div class="v mono'+(cls||"")+'">'+fmt(v)+'</div>'+(s?'<div class="s">'+s+'</div>':"")));
+  tile(ar?"Owed to us":"We owe",tot,cnt+(cnt===1?" party":" parties")+" with an open balance");
+  tile("Older than 60 days",over,tot?Math.round(over/tot*100)+"% of the total":"",over>0.004?" neg":"");
+  const tl={client:"clients",supplier:"suppliers",employee:"employees",partner:"partners",other:"other"}; Object.entries(byType).sort((a,b)=>b[1]-a[1]).slice(0,3).forEach(([t,v])=>tile(tl[t]||t,v,""));
+  m.appendChild(tiles);
+  const w=el("div","tablewrap"); m.appendChild(w); const foot=el("p","meta",""); m.appendChild(foot);
+  const draw=()=>{
+    const qv=st.q.trim().toLowerCase(); const list=rows.filter(r=>(st.settled||Math.abs(r.total)>0.004)&&(!qv||r.party.toLowerCase().includes(qv))).sort((a,b)=>b.total-a.total||(a.party<b.party?-1:1));
+    const t=el("table","gl glx arap"); t.innerHTML='<thead><tr><th>'+(ar?"Client / party":"Party")+'</th><th>Type</th>'+(scope==="consolidated"?'<th>Co.</th>':"")+'<th class="num">Open balance</th>'+AGE_BUCKETS.map(b=>'<th class="num">'+b[1]+'</th>').join("")+'<th>Oldest open</th><th>Last activity</th><th></th></tr></thead>';
+    const tb=el("tbody"); const sums={b0:0,b1:0,b2:0,b3:0,total:0};
+    list.forEach(r=>{ const k=r.party+"|"+r.co; const openRow=!!st.open[k]; sums.total+=r.total; AGE_BUCKETS.forEach(b=>sums[b[0]]+=r.buckets[b[0]]);
+      const tr=el("tr","prow"+(openRow?" open":"")); tr.innerHTML='<td><button class="exp" aria-expanded="'+openRow+'">'+(openRow?"▾":"▸")+' '+esc(r.party)+'</button></td><td><span class="pill">'+esc(r.type)+'</span></td>'+(scope==="consolidated"?'<td><span class="pill '+(r.co==="Vyltic"?"vy":"we")+'">'+esc(r.co[0]||"")+'</span></td>':"")
+        +'<td class="num'+(r.total<-0.004?" warn":"")+'"><b>'+fmt(r.total)+'</b></td>'+AGE_BUCKETS.map(b=>'<td class="num'+(b[0]==="b3"&&r.buckets.b3>0.004?" warn":"")+'">'+(r.buckets[b[0]]>0.004?fmt(r.buckets[b[0]]):"")+'</td>').join("")+'<td class="mono">'+esc(r.oldest)+(r.oldest?' <span class="meta">'+(daysBetween(r.oldest,st.asOf)-1)+'d</span>':"")+'</td><td class="mono">'+esc(r.last)+'</td>';
+      const act=el("td","nowrap"); const gl=el("button","btn3","GL "+ICON.arrow); gl.title="All entries for this name"; gl.onclick=ev=>{ ev.stopPropagation(); goTab("GL",{gl:r.party}); }; act.appendChild(gl);
+      if(edit&&r.total>0.004){ const b=el("button","btn3",ar?"Collect…":"Pay…"); b.onclick=async ev=>{ ev.stopPropagation(); const d=prompt((ar?"Date received from ":"Payment date for ")+r.party+":",today()); if(!d) return; if(!isDate(d)){ toast("Date must be YYYY-MM-DD."); return; } const amt=+prompt((ar?"Amount received from ":"Amount paid to ")+r.party+" (open "+fmt(r.total)+"):",String(r.total)); if(!(amt>0)){ toast("Amount must be positive."); return; } b.disabled=true;
+          try{ const n=await postSettle(kind,r.party,r.co,r2(amt),d); toast((ar?"Collected":"Paid")+" — entry #"+n+"."); DATA.consolidated=null; render(); }catch(e){ toast("Not posted: "+e.message,7000); b.disabled=false; } }; act.appendChild(b); }
+      tr.appendChild(act); tr.querySelector("button.exp").onclick=()=>{ st.open[k]=!st.open[k]; draw(); }; tb.appendChild(tr);
+      if(openRow){ const d=el("tr","pdet"); const td=el("td"); td.colSpan=9+(scope==="consolidated"?1:0); const it=el("table","items");
+        it.innerHTML='<tr><th>Date</th><th>#</th><th>What</th><th class="num">Amount</th><th class="num">Still open</th><th class="num">Age</th></tr>'+r.items.filter(i=>st.settled||i.open>0.004).map(i=>'<tr class="'+(i.open>0.004?"":"done")+'"><td class="mono">'+esc(i.date)+'</td><td class="mono"><button class="btn3 lnk" data-n="'+i.n+'">#'+i.n+'</button></td><td>'+esc(i.desc)+'</td><td class="num mono">'+fmt(i.amt)+'</td><td class="num mono">'+(i.open>0.004?'<b>'+fmt(i.open)+'</b>':'<span class="meta">settled</span>')+'</td><td class="num mono">'+(i.open>0.004?(i.days+"d"):"")+'</td></tr>').join("")
+          +r.credits.map(c=>'<tr class="cred"><td class="mono">'+esc(c.date)+'</td><td class="mono"><button class="btn3 lnk" data-n="'+c.n+'">#'+c.n+'</button></td><td>'+esc(c.desc)+' <span class="meta">— '+(ar?"received":"paid")+' without an open item (advance / overpayment)</span></td><td class="num mono"></td><td class="num mono">−'+fmt(c.amt)+'</td><td></td></tr>').join("");
+        it.querySelectorAll("button.lnk").forEach(b=>b.onclick=()=>openGL("#"+b.getAttribute("data-n"))); td.appendChild(it); d.appendChild(td); tb.appendChild(d); } });
+    const tr=el("tr","tbg"); tr.innerHTML='<td>TOTAL</td><td></td>'+(scope==="consolidated"?'<td></td>':"")+'<td class="num">'+fmt(sums.total)+'</td>'+AGE_BUCKETS.map(b=>'<td class="num">'+fmt(sums[b[0]])+'</td>').join("")+'<td></td><td></td><td></td>'; tb.appendChild(tr); t.appendChild(tb);
+    w.innerHTML=""; w.appendChild(t); if(!list.length) w.appendChild(el("p","meta","Nothing open"+(qv?" for “"+esc(st.q)+"”":"")+"."));
+    foot.innerHTML=(Math.abs(blank)>0.004?"Lines with no name (bank-timing offsets): "+fmt(blank)+" — not in the table. ":"")+"Open balance = what is booked as owed minus what was "+(ar?"received":"paid")+", matched oldest first; a negative balance means "+(ar?"money received before an invoice":"a payment or advance ahead of a bill")+". Click a name for its items.";
+    exp.onclick=()=>{ const rc=[["party","type","company","open","0-30","31-60","61-90","90+","oldest open","last activity"]]; list.forEach(r=>rc.push([r.party,r.type,r.co,r.total,r.buckets.b0,r.buckets.b1,r.buckets.b2,r.buckets.b3,r.oldest,r.last])); csvDownload("wahj-"+(ar?"receivables":"payables")+"-"+scope+"-"+st.asOf+".csv",rc); };
+  };
+  draw();
+  if(!ar){   // other liability accounts: balances by party
+    const oth=el("div"); oth.style.marginTop="18px"; let any=false;
+    AP_OTHER.forEach(([code,name])=>{ const by2=openItems(entries,[code],"cr",st.asOf); const rs=Object.values(by2).filter(r=>(!st.co||r.co===st.co)&&Math.abs(r.total)>0.004); if(!rs.length) return; any=true;
+      oth.appendChild(el("h2","sec",code+" · "+name)); const t=el("table","gl arap"); t.innerHTML='<thead><tr><th>Party</th>'+(scope==="consolidated"?'<th>Co.</th>':"")+'<th class="num">Balance</th><th>Last activity</th><th></th></tr></thead>';
+      const tb=el("tbody"); rs.sort((a,b)=>b.total-a.total).forEach(r=>{ const tr=el("tr"); tr.innerHTML='<td>'+esc(r.party||"(no name)")+'</td>'+(scope==="consolidated"?'<td><span class="pill '+(r.co==="Vyltic"?"vy":"we")+'">'+esc(r.co[0]||"")+'</span></td>':"")+'<td class="num"><b>'+fmt(r.total)+'</b></td><td class="mono">'+esc(r.last)+'</td>'; const td=el("td"); const g=el("button","btn3","GL "+ICON.arrow); g.onclick=()=>{ REP.gl=Object.assign(REP.gl||{},{a:code,m:""}); repSave(); goTab("GL",{gl:r.party||""}); }; td.appendChild(g); tr.appendChild(td); tb.appendChild(tr); });
+      const sum=rs.reduce((a,r)=>a+r.total,0); const tr=el("tr","tbg"); tr.innerHTML='<td>TOTAL</td>'+(scope==="consolidated"?'<td></td>':"")+'<td class="num">'+fmt(sum)+'</td><td></td><td></td>'; tb.appendChild(tr); t.appendChild(tb); const w2=el("div","tablewrap"); w2.appendChild(t); oth.appendChild(w2); });
+    if(any) m.appendChild(oth);
+  }
 }
 function blankLine(){ return {code:"",party:"",desc:"",dr:"",cr:""}; }
 function partyOptions(){
