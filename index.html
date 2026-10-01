@@ -694,10 +694,10 @@ async function postEntry(e){
   return n;
 }
 async function addListItem(list,value){
-  LISTS=await ghUpdate("data/lists.enc","common",o=>{ o=o||LISTS; if(!o[list]) o[list]=[]; if(!o[list].some(v=>v.toLowerCase()===value.toLowerCase())) o[list].push(value); return o; },"Lists: add “"+value+"” to "+list);
+  LISTS=await ghUpdate("data/lists.enc","common",o=>{ o=o||LISTS; if(!o[list]) o[list]=[]; if(!o[list].some(v=>v.toLowerCase()===value.toLowerCase())) o[list].push(value); return o; },"Lists: update");
 }
 async function addAccount(row){
-  COA=await ghUpdate("data/coa.enc","common",o=>{ o=o||COA; if(o.some(a=>a[0]===row[0])) throw new Error("Code "+row[0]+" already exists."); o.push(row); o.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0); return o; },"CoA: add "+row[0]+" "+row[1]);
+  COA=await ghUpdate("data/coa.enc","common",o=>{ o=o||COA; if(o.some(a=>a[0]===row[0])) throw new Error("Code "+row[0]+" already exists."); o.push(row); o.sort((a,b)=>a[0]<b[0]?-1:a[0]>b[0]?1:0); return o; },"CoA: update");
   indexCoA();
 }
 
@@ -1981,7 +1981,7 @@ function viewAdmin(m){
       const rp=el("button","btn3","Reset password");
       rp.onclick=async()=>{ const pw=prompt("New password for "+(p.name||p.email)+" (10+ characters). It is saved as soon as you click OK:",genPassword()); if(!pw) return; if(pw.length<10){ toast("Use at least 10 characters."); return; }
         rp.disabled=true; rp.textContent="Saving…";
-        try{ await setPassword(p,pw); await saveAdmin("Reset password — "+(p.name||p.email));
+        try{ await setPassword(p,pw); await saveAdmin("Admin: reset password");
           if(p.email===MYEMAIL){ try{ sessionStorage.setItem("wahj.sess",JSON.stringify({email:MYEMAIL,kek:p.kek})); }catch(e){} }
           toast("Password saved for "+(p.name||p.email)+". Tell them: "+pw+" — it works straight away on the sign-in page (the site checks the saved copy if the published one is behind).",14000);
           watchPublish(); }
@@ -2015,8 +2015,21 @@ function viewAdmin(m){
       try{ await saveAdmin("Update people & rights"); toast("Saved. Publishing to the site takes 1–3 minutes; sign-in already uses the saved copy.",7000); renderTabs(); watchPublish(); }
       catch(e){ toast("Save failed: "+e.message,7000); }
       save.disabled=false; save.textContent="Save changes"; };
-    acts.append(save); zone.appendChild(acts);
-    zone.appendChild(el("p","meta","<b>Reset password</b> saves the new password immediately (no need to click Save changes). Passwords are never stored — the site derives a key from them. Keep them 10+ characters. Consolidated needs both companies ticked. Ahmed’s own admin access can’t be removed. Rights are applied by the site; anyone holding at least one right also holds the site’s save token, so give rights only to people you trust with the books."));
+    acts.append(save);
+    if(RAW.admin){ const tk=el("button","btn2","Replace GitHub token…"); tk.title="Paste a new GitHub token for the site's saves (a fine-grained token limited to this repository, Contents: read & write). The old one keeps working until you revoke it on GitHub."; tk.style.marginLeft="8px";
+      tk.onclick=async()=>{ const v=(prompt("New GitHub token for the site's saves (it is checked against the repository, then saved for everyone with a write right — it is never shown again):")||"").trim(); if(!v) return;
+        if(!/^(ghp_|github_pat_)[A-Za-z0-9_]{20,}$/.test(v)){ toast("That doesn't look like a GitHub token (ghp_… or github_pat_…)."); return; }
+        tk.disabled=true; tk.textContent="Checking…";
+        try{ const r=await fetch(GH_API+"/contents/data/seq.json?t="+Date.now(),{headers:{Authorization:"Bearer "+v,Accept:"application/vnd.github+json"}}); if(!r.ok) throw new Error("GitHub refused it ("+r.status+") — check the token's repository and Contents permission.");
+          const sc=r.headers.get("x-oauth-scopes"); if(sc&&/\brepo\b/.test(sc)&&!confirm("This is a classic token with the full 'repo' scope (every repository of the account). A fine-grained token limited to this repository is safer. Use it anyway?")) throw new Error("cancelled");
+          const old=PAT; ADMIN.pat=v; PAT=v;
+          try{ await saveAdmin("Admin: token replaced"); }catch(e){ ADMIN.pat=old; PAT=old; throw e; }
+          toast("Token replaced and saved. Now revoke the old token on GitHub (Settings → Developer settings → tokens).",12000); render(); return; }
+        catch(e){ if(e.message!=="cancelled") toast("Not replaced: "+e.message,9000); }
+        tk.disabled=false; tk.textContent="Replace GitHub token…"; };
+      acts.appendChild(tk); const kind=PAT?(/^github_pat_/.test(PAT)?"fine-grained token":"classic token"):"no token"; acts.appendChild(el("span","meta","Site saves use a "+kind+" ("+(PAT?PAT.slice(0,4)+"…"+PAT.slice(-3):"—")+").")); }
+    zone.appendChild(acts);
+    zone.appendChild(el("p","meta","<b>Reset password</b> saves the new password immediately (no need to click Save changes). Passwords are never stored — the site derives a key from them. Keep them 10+ characters. Consolidated needs both companies ticked. Ahmed’s own admin access can’t be removed. Rights are applied by the site; anyone holding at least one right also holds the site’s save token — with it they could post straight to the books or change any file in the site repository, so give rights only to people you trust with the books, and replace the token when someone with a right leaves."));
   }).catch(e=>{ zone.innerHTML=""; zone.appendChild(el("p","meta","Couldn’t open the people register: "+esc(e.message))); });
 }
 
